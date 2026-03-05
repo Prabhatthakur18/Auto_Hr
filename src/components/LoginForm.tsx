@@ -1,166 +1,112 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LogIn, Eye, EyeOff, User, Shield, Building } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { UserRole } from '../context/AuthContext';
+import { Shield, LogOut, Loader2 } from 'lucide-react';
 
 interface LoginFormProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess?: () => void;
 }
 
 const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
-  const navigate = useNavigate();
   const { login } = useAuth();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError('');
+    setIsSubmitting(true);
 
-    // Use username instead of email for authentication
-    const success = login(email, password);
-    
-    if (success) {
-      onLoginSuccess();
-      setIsLoading(false);
-      // Navigate to dashboard after successful login
-      setTimeout(() => {
-        navigate('/');
-      }, 1000);
-    } else {
-      setError('Invalid username or password. Please try again.');
-      setIsLoading(false);
-    }
-  };
-
-  const getRoleIcon = (role: UserRole) => {
-    switch (role) {
-      case 'HR':
-        return <Shield className="w-4 h-4" />;
-      case 'MANAGEMENT':
-        return <Building className="w-4 h-4" />;
-      case 'EMPLOYEE':
-        return <User className="w-4 h-4" />;
-      default:
-        return <User className="w-4 h-4" />;
+    try {
+      const success = await login(username, password);
+      if (success) {
+        onLoginSuccess?.();
+      } else {
+        setError('Invalid username or password');
+      }
+    } catch {
+      setError('Connection error. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-extrabold text-gray-900">
-              Sign in to your account
-            </h2>
-            <p className="mt-2 text-sm text-gray-600">
-              Welcome back! Please sign in to continue.
-            </p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="w-full max-w-md px-6">
+        {/* Logo / Header */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30 mb-4">
+            <Shield className="w-8 h-8 text-white" />
           </div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Auto HR</h1>
+          <p className="text-slate-400 mt-2">Autoform India HR Portal</p>
+        </div>
 
-          <form className="space-y-6" onSubmit={handleSubmit}>
+        {/* Login Card */}
+        <div className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/10 p-8 shadow-2xl">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 Username
               </label>
-              <div className="mt-1">
-                <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  autoComplete="username"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="Enter your username"
-                />
-              </div>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                placeholder="Enter your username"
+                required
+                disabled={isSubmitting}
+                autoFocus
+              />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 Password
               </label>
-              <div className="mt-1 relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="Enter your password"
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4 text-gray-400" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-gray-400" />
-                  )}
-                </button>
-              </div>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                placeholder="Enter your password"
+                required
+                disabled={isSubmitting}
+              />
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                <p className="text-sm text-red-600">{error}</p>
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-300 text-sm">
+                {error}
               </div>
             )}
 
-            <div>
-              <button
-                type="submit"
-                disabled={isLoading || !email || !password}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isLoading ? (
-                  <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Signing in...
-                  </div>
-                ) : (
-                  <div className="flex items-center">
-                    <LogIn className="w-4 h-4 mr-2" />
-                    Sign in
-                  </div>
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                <>
+                  <LogOut className="w-5 h-5" />
+                  Sign In
+                </>
+              )}
+            </button>
           </form>
-
-          <div className="mt-6">
-            <div className="text-center">
-              <p className="text-sm text-gray-600 mb-3">Demo credentials:</p>
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-center space-x-2">
-                  {getRoleIcon('HR')}
-                  <span className="text-gray-700">HR: <strong>hr</strong> / <strong>hr123</strong></span>
-                </div>
-                <div className="flex items-center justify-center space-x-2">
-                  {getRoleIcon('MANAGEMENT')}
-                  <span className="text-gray-700">Management: <strong>man</strong> / <strong>man123</strong></span>
-                </div>
-                <div className="flex items-center justify-center space-x-2">
-                  {getRoleIcon('EMPLOYEE')}
-                  <span className="text-gray-700">Employee: <strong>emp</strong> / <strong>emp123</strong></span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
+
+        <p className="text-center text-slate-500 text-xs mt-6">
+          Secure login — credentials verified by server
+        </p>
       </div>
     </div>
   );

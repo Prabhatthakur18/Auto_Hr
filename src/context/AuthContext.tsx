@@ -1,28 +1,13 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { authApi, type AuthUser } from '../services/api';
 
-export type UserRole = 'HR' | 'MANAGEMENT' | 'EMPLOYEE';
-
-export interface User {
-  username: string;
-  role: UserRole;
-  permissions: {
-    canAddCompany: boolean;
-    canEditCompany: boolean;
-    canDeleteCompany: boolean;
-    canAddEmployee: boolean;
-    canEditEmployee: boolean;
-    canDeleteEmployee: boolean;
-    canEditEmployeeAbout: boolean;
-    canEditEmployeeLeaves: boolean;
-    canEditEmployeeBasic: boolean;
-    canEditEmployeeAll: boolean;
-  };
-}
+export type UserRole = 'HR' | 'MANAGER' | 'EMPLOYEE';
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   isLoggedIn: boolean;
-  login: (username: string, password: string) => boolean;
+  isLoading: boolean;
+  login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
 }
 
@@ -41,83 +26,60 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = (username: string, password: string): boolean => {
-    let userRole: UserRole | null = null;
-    
-    // Check credentials
-    if (username === 'hr' && password === 'hr123') {
-      userRole = 'HR';
-    } else if (username === 'man' && password === 'man123') {
-      userRole = 'MANAGEMENT';
-    } else if (username === 'emp' && password === 'emp123') {
-      userRole = 'EMPLOYEE';
+  // On mount, check if we have a stored token and validate it
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await authApi.me();
+        if (response.data?.user) {
+          setUser(response.data.user);
+          setIsLoggedIn(true);
+        }
+      } catch {
+        // Token invalid/expired — clear it
+        localStorage.removeItem('token');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  const login = async (username: string, password: string): Promise<boolean> => {
+    try {
+      const response = await authApi.login(username, password);
+      if (response.data) {
+        localStorage.setItem('token', response.data.token);
+        setUser(response.data.user);
+        setIsLoggedIn(true);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
     }
-
-    if (userRole) {
-      // Define permissions based on role
-      const permissions = {
-        HR: {
-          canAddCompany: true,
-          canEditCompany: true,
-          canDeleteCompany: false,
-          canAddEmployee: true,
-          canEditEmployee: true,
-          canDeleteEmployee: false,
-          canEditEmployeeAbout: true,
-          canEditEmployeeLeaves: true,
-          canEditEmployeeBasic: true,
-          canEditEmployeeAll: false,
-        },
-        MANAGEMENT: {
-          canAddCompany: true,
-          canEditCompany: true,
-          canDeleteCompany: true,
-          canAddEmployee: true,
-          canEditEmployee: true,
-          canDeleteEmployee: true,
-          canEditEmployeeAbout: true,
-          canEditEmployeeLeaves: true,
-          canEditEmployeeBasic: true,
-          canEditEmployeeAll: true,
-        },
-        EMPLOYEE: {
-          canAddCompany: false,
-          canEditCompany: false,
-          canDeleteCompany: false,
-          canAddEmployee: false,
-          canEditEmployee: false,
-          canDeleteEmployee: false,
-          canEditEmployeeAbout: false,
-          canEditEmployeeLeaves: false,
-          canEditEmployeeBasic: false,
-          canEditEmployeeAll: false,
-        },
-      };
-
-      const newUser: User = {
-        username,
-        role: userRole,
-        permissions: permissions[userRole],
-      };
-
-      setUser(newUser);
-      setIsLoggedIn(true);
-      return true;
-    }
-
-    return false;
   };
 
   const logout = () => {
+    localStorage.removeItem('token');
+    authApi.logout().catch(() => { }); // Best effort server logout
     setUser(null);
     setIsLoggedIn(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoggedIn, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
