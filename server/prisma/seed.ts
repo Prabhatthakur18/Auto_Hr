@@ -34,7 +34,7 @@ async function main() {
         { biometricId: 7, name: 'Gunjan', department: 'Operations' },
         { biometricId: 9, name: 'Aarti', department: 'Operations' },
         { biometricId: 10, name: 'Akansha Bajpai', department: 'Operations' },
-        { biometricId: 11, name: 'Chirag Channa', department: 'Operations' },
+        { biometricId: 11, name: 'Chirag Chaddha', department: 'Operations' },
         { biometricId: 14, name: 'Sumit', department: 'Operations' },
         { biometricId: 15, name: 'Sanjay Dwivedi', department: 'Operations' },
         { biometricId: 17, name: 'Himanshu Gandhi', department: 'Operations' },
@@ -51,6 +51,8 @@ async function main() {
         { biometricId: 40, name: 'Naman', department: 'Operations' },
         { biometricId: 41, name: 'Ashish Rai', department: 'Operations' },
         { biometricId: 42, name: 'Bharat Maheshwari', department: 'Engineering' },
+        { biometricId: 43, name: 'Trisha Kushwaha', department: 'Operations' },
+        { biometricId: 45, name: 'Kashif', department: 'Operations' },
     ];
 
     let created = 0;

@@ -11,6 +11,7 @@ import leaveRouter from './routes/leaves.js';
 import attendanceRouter from './routes/attendance.js';
 import salaryRouter from './routes/salary.js';
 import announcementRouter from './routes/announcements.js';
+import performanceRouter from './routes/performance.js';
 
 const app = express();
 
@@ -70,6 +71,7 @@ app.use('/api/leaves', leaveRouter);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/salary', salaryRouter);
 app.use('/api/announcements', announcementRouter);
+app.use('/api/performance', performanceRouter);
 
 // ─── ERROR HANDLING ──────────────────────────────────────────
 

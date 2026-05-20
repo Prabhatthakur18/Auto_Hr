@@ -168,8 +168,7 @@ router.post(
                 totalDeductions: deductions,
                 netSalary,
                 workingDays,
-                daysPresent,
-                breakdownJson: {
+                breakdownJson: JSON.stringify({
                     basicSalary: Number(breakdown.basicSalary),
                     hra: Number(breakdown.hra),
                     da: Number(breakdown.da),
@@ -180,7 +179,7 @@ router.post(
                     esi: Number(breakdown.esi),
                     tax: Number(breakdown.tax),
                     otherDeductions: Number(breakdown.otherDeductions),
-                },
+                }),
             },
             create: {
                 employeeId,
@@ -190,7 +189,7 @@ router.post(
                 netSalary,
                 workingDays,
                 daysPresent,
-                breakdownJson: {
+                breakdownJson: JSON.stringify({
                     basicSalary: Number(breakdown.basicSalary),
                     hra: Number(breakdown.hra),
                     da: Number(breakdown.da),
@@ -201,7 +200,7 @@ router.post(
                     esi: Number(breakdown.esi),
                     tax: Number(breakdown.tax),
                     otherDeductions: Number(breakdown.otherDeductions),
-                },
+                }),
             },
         });
 

@@ -127,18 +127,31 @@ export const attendanceApi = {
         );
     },
 
-    uploadBiometric: (file: File) => {
+    saveManual: (data: { employeeId: number; date: string; checkIn?: string; checkOut?: string; status?: string }) => {
+        return request<{ attendance: Attendance }>('/attendance/manual', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    uploadBiometric: (file: File, targetMonth?: string) => {
         const formData = new FormData();
         formData.append('file', file);
+        if (targetMonth) {
+            formData.append('targetMonth', targetMonth);
+        }
         return request<{ totalRecords: number; processedDays: number; inserted: number }>('/attendance/upload/biometric', {
             method: 'POST',
             body: formData,
         });
     },
 
-    uploadExcel: (file: File) => {
+    uploadExcel: (file: File, targetMonth?: string) => {
         const formData = new FormData();
         formData.append('file', file);
+        if (targetMonth) {
+            formData.append('targetMonth', targetMonth);
+        }
         return request<{ totalRows: number; inserted: number; skipped: number }>('/attendance/upload/excel', {
             method: 'POST',
             body: formData,
@@ -193,6 +206,43 @@ export const announcementApi = {
 
     delete: (id: number) =>
         request(`/announcements/${id}`, { method: 'DELETE' }),
+};
+
+// ─── Performance (KRA / KPI) ─────────────────────────────────
+
+export const performanceApi = {
+    get: (employeeId: number) =>
+        request<{ kras: import('../types').Kra[]; summary: import('../types').PerformanceSummary }>(`/performance/${employeeId}`),
+
+    createKra: (data: { employeeId: number; title: string; description?: string; period?: string }) =>
+        request<{ kra: import('../types').Kra }>('/performance/kra', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+
+    updateKra: (id: number, data: { title?: string; description?: string; period?: string }) =>
+        request<{ kra: import('../types').Kra }>(`/performance/kra/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        }),
+
+    deleteKra: (id: number) =>
+        request(`/performance/kra/${id}`, { method: 'DELETE' }),
+
+    createKpi: (data: { kraId: number; metric: string; target: number; actual?: number | null; unit?: string | null }) =>
+        request<{ kpi: import('../types').Kpi }>('/performance/kpi', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+
+    updateKpi: (id: number, data: { metric?: string; target?: number; actual?: number | null; unit?: string | null }) =>
+        request<{ kpi: import('../types').Kpi }>(`/performance/kpi/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        }),
+
+    deleteKpi: (id: number) =>
+        request(`/performance/kpi/${id}`, { method: 'DELETE' }),
 };
 
 // ─── Types ───────────────────────────────────────────────────

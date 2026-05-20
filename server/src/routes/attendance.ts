@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import * as XLSX from 'xlsx';
+// @ts-ignore
+import ZKLib from 'zkteco-js';
 import prisma from '../config/db.js';
 import { authenticate, authorize, scopeData } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
@@ -36,31 +38,35 @@ interface BiometricRecord {
 function parseBiometricFile(buffer: Buffer): BiometricRecord[] {
     const records: BiometricRecord[] = [];
 
-    // Try different encodings
-    let content: string | null = null;
-    const encodings: BufferEncoding[] = ['utf-8', 'utf16le', 'latin1'];
-
-    for (const encoding of encodings) {
-        try {
-            content = buffer.toString(encoding).trim();
-            if (content.includes('\n')) break;
-        } catch {
-            continue;
+    // Detect BOM or check for null bytes to identify UTF-16LE encoding
+    let encoding: BufferEncoding = 'utf-8';
+    if (buffer[0] === 0xff && buffer[1] === 0xfe) {
+        encoding = 'utf16le';
+    } else if (buffer[0] === 0xfe && buffer[1] === 0xff) {
+        encoding = 'utf16le';
+    } else {
+        // Fallback: if it contains a high density of null bytes, it's UTF-16LE
+        let nullCount = 0;
+        const testLen = Math.min(buffer.length, 1000);
+        for (let i = 0; i < testLen; i++) {
+            if (buffer[i] === 0) nullCount++;
+        }
+        if (nullCount > testLen / 4) {
+            encoding = 'utf16le';
         }
     }
 
-    if (!content) throw new BadRequestError('Unable to decode biometric file');
+    const content = buffer.toString(encoding).trim();
+    // Remove any trailing or remaining null bytes
+    const cleanedContent = content.replace(/\0/g, '');
 
-    const lines = content.split('\n');
-    // Skip header line
+    const lines = cleanedContent.split(/\r?\n/);
     const dataLines = lines.slice(1);
 
     for (const line of dataLines) {
         if (!line.trim()) continue;
 
-        // Look for employee number (zero-padded, e.g., '00000020')
         const enNoMatch = line.match(/\b(0+\d+)\b/);
-        // Look for datetime pattern
         const dtMatch = line.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
 
         if (enNoMatch && dtMatch) {
@@ -236,8 +242,17 @@ router.post(
     asyncHandler(async (req, res) => {
         if (!req.file) throw new BadRequestError('No file uploaded');
 
-        const records = parseBiometricFile(req.file.buffer);
+        const { targetMonth } = req.body;
+
+        let records = parseBiometricFile(req.file.buffer);
         if (records.length === 0) throw new BadRequestError('No valid records found in file');
+
+        if (targetMonth) {
+            records = records.filter(r => r.date.startsWith(targetMonth));
+            if (records.length === 0) {
+                throw new BadRequestError(`No records found in file matching target month: ${targetMonth}`);
+            }
+        }
 
         const processed = processAttendanceRecords(records);
 
@@ -249,50 +264,45 @@ router.post(
         });
         const bioToEmpId = new Map(employees.map(e => [e.biometricId, e.id]));
 
+        const validProcessed = processed.filter(r => bioToEmpId.has(r.biometricId));
+        const unmapped = processed.length - validProcessed.length;
+
         let inserted = 0;
         let skipped = 0;
-        let unmapped = 0;
 
-        for (const record of processed) {
-            const empId = bioToEmpId.get(record.biometricId);
-            if (!empId) { unmapped++; continue; }
-
+        if (validProcessed.length > 0) {
             try {
-                await prisma.attendance.upsert({
-                    where: {
-                        employeeId_date: {
-                            employeeId: empId,
-                            date: new Date(record.date),
+                await prisma.$transaction(async (tx) => {
+                    const deleteConditions = validProcessed.map(r => ({
+                        employeeId: bioToEmpId.get(r.biometricId)!,
+                        date: new Date(r.date),
+                    }));
+
+                    await tx.attendance.deleteMany({
+                        where: {
+                            OR: deleteConditions,
                         },
-                    },
-                    update: {
-                        checkIn: record.checkIn,
-                        checkOut: record.checkOut,
-                        day: record.day,
-                        totalWorkingHours: record.totalWorkingHours,
-                        isLate: record.isLate,
-                        lateBy: record.lateBy,
-                        overtime: record.overtime,
-                        otTime: record.otTime,
-                        status: 'PRESENT',
-                    },
-                    create: {
-                        employeeId: empId,
-                        date: new Date(record.date),
-                        day: record.day,
-                        checkIn: record.checkIn,
-                        checkOut: record.checkOut,
-                        totalWorkingHours: record.totalWorkingHours,
-                        isLate: record.isLate,
-                        lateBy: record.lateBy,
-                        overtime: record.overtime,
-                        otTime: record.otTime,
-                        status: 'PRESENT',
-                    },
+                    });
+
+                    await tx.attendance.createMany({
+                        data: validProcessed.map(r => ({
+                            employeeId: bioToEmpId.get(r.biometricId)!,
+                            date: new Date(r.date),
+                            day: r.day,
+                            checkIn: r.checkIn,
+                            checkOut: r.checkOut,
+                            totalWorkingHours: r.totalWorkingHours,
+                            isLate: r.isLate,
+                            lateBy: r.lateBy,
+                            overtime: r.overtime,
+                            otTime: r.otTime,
+                            status: 'PRESENT',
+                        })),
+                    });
                 });
-                inserted++;
-            } catch {
-                skipped++;
+                inserted = validProcessed.length;
+            } catch (err) {
+                skipped = validProcessed.length;
             }
         }
 
@@ -320,11 +330,26 @@ router.post(
     asyncHandler(async (req, res) => {
         if (!req.file) throw new BadRequestError('No file uploaded');
 
+        const { targetMonth } = req.body;
+
         const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]!];
         if (!sheet) throw new BadRequestError('Empty spreadsheet');
 
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+        let rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+
+        if (targetMonth) {
+            const [year, month] = targetMonth.split('-').map(Number);
+            rows = rows.filter(row => {
+                const dateStr = String(row['Date'] || '');
+                if (!dateStr) return false;
+                const d = new Date(dateStr);
+                return d.getFullYear() === year && (d.getMonth() + 1) === month;
+            });
+            if (rows.length === 0) {
+                throw new BadRequestError(`No records found in Excel matching target month: ${targetMonth}`);
+            }
+        }
 
         // Map biometric IDs to employee IDs
         const employees = await prisma.employee.findMany({
@@ -332,61 +357,67 @@ router.post(
         });
         const bioToEmpId = new Map(employees.map(e => [e.biometricId, e.id]));
 
-        let inserted = 0;
+        const validRows: Array<{ empId: number; date: Date; row: Record<string, any> }> = [];
         let skipped = 0;
 
         for (const row of rows) {
             const bioId = Number(row['ID']);
             const empId = bioToEmpId.get(bioId);
-            if (!empId) { skipped++; continue; }
-
             const dateStr = String(row['Date'] || '');
-            if (!dateStr) { skipped++; continue; }
 
-            const inTime = String(row['IN'] || '');
-            const outTime = String(row['OUT'] || '');
-            const remark = String(row['Remark'] || '');
-            const lateBy = String(row['Late By'] || '');
-            const totalHours = String(row['Total working Hours'] || '');
-            const ot = String(row['Overtime'] || '');
-            const otTimeStr = String(row['OT time'] || '');
-
-            try {
-                await prisma.attendance.upsert({
-                    where: {
-                        employeeId_date: {
-                            employeeId: empId,
-                            date: new Date(dateStr),
-                        },
-                    },
-                    update: {
-                        checkIn: inTime || null,
-                        checkOut: outTime || null,
-                        day: String(row['Day'] || ''),
-                        totalWorkingHours: totalHours || null,
-                        isLate: remark.toLowerCase().includes('late'),
-                        lateBy: lateBy || null,
-                        overtime: ot.toLowerCase() === 'yes',
-                        otTime: otTimeStr || null,
-                        status: inTime ? 'PRESENT' : 'ABSENT',
-                    },
-                    create: {
-                        employeeId: empId,
-                        date: new Date(dateStr),
-                        day: String(row['Day'] || ''),
-                        checkIn: inTime || null,
-                        checkOut: outTime || null,
-                        totalWorkingHours: totalHours || null,
-                        isLate: remark.toLowerCase().includes('late'),
-                        lateBy: lateBy || null,
-                        overtime: ot.toLowerCase() === 'yes',
-                        otTime: otTimeStr || null,
-                        status: inTime ? 'PRESENT' : 'ABSENT',
-                    },
-                });
-                inserted++;
-            } catch {
+            if (!empId || !dateStr) {
                 skipped++;
+                continue;
+            }
+
+            validRows.push({
+                empId,
+                date: new Date(dateStr),
+                row,
+            });
+        }
+
+        let inserted = 0;
+
+        if (validRows.length > 0) {
+            try {
+                await prisma.$transaction(async (tx) => {
+                    const deleteConditions = validRows.map(vr => ({
+                        employeeId: vr.empId,
+                        date: vr.date,
+                    }));
+
+                    await tx.attendance.deleteMany({
+                        where: {
+                            OR: deleteConditions,
+                        },
+                    });
+
+                    await tx.attendance.createMany({
+                        data: validRows.map(vr => {
+                            const row = vr.row;
+                            const inTime = String(row['IN'] || '');
+                            const remark = String(row['Remark'] || '');
+                            const ot = String(row['Overtime'] || '');
+                            return {
+                                employeeId: vr.empId,
+                                date: vr.date,
+                                day: String(row['Day'] || ''),
+                                checkIn: inTime || null,
+                                checkOut: String(row['OUT'] || '') || null,
+                                totalWorkingHours: String(row['Total working Hours'] || '') || null,
+                                isLate: remark.toLowerCase().includes('late'),
+                                lateBy: String(row['Late By'] || '') || null,
+                                overtime: ot.toLowerCase() === 'yes',
+                                otTime: String(row['OT time'] || '') || null,
+                                status: inTime ? 'PRESENT' : 'ABSENT',
+                            };
+                        }),
+                    });
+                });
+                inserted = validRows.length;
+            } catch (err) {
+                skipped += validRows.length;
             }
         }
 
@@ -438,6 +469,126 @@ router.post(
             data: { attendance },
             message: 'Attendance record saved',
         });
+    })
+);
+
+// ─── POST /api/attendance/sync-device ────────────────────────
+// Auto-sync attendance directly from ZKTeco/Secureye machine (READ ONLY)
+
+router.post(
+    '/sync-device',
+    authorize('HR'),
+    asyncHandler(async (_req, res) => {
+        const ip = process.env.BIOMETRIC_DEVICE_IP;
+        const port = Number(process.env.BIOMETRIC_DEVICE_PORT) || 4370;
+
+        if (!ip) throw new BadRequestError('BIOMETRIC_DEVICE_IP is not configured in .env');
+
+        let zkInstance: any = null;
+        try {
+            zkInstance = new ZKLib(ip, port, 10000, 4000);
+            
+            // 1. Connect to device
+            await zkInstance.createSocket();
+            
+            // 2. Read attendance log (READ ONLY)
+            const attendances = await zkInstance.getAttendances();
+            
+            if (!attendances || !attendances.data || attendances.data.length === 0) {
+                 await zkInstance.disconnect();
+                 res.json({ success: true, message: 'No new attendance data found on device', data: { inserted: 0, skipped: 0 } });
+                 return;
+            }
+
+            // 3. Convert raw device data to our BiometricRecord format
+            const records: BiometricRecord[] = attendances.data.map((log: any) => {
+                const dt = new Date(log.recordTime);
+                return {
+                    enNo: parseInt(log.deviceUserId, 10),
+                    dateTime: dt,
+                    date: dt.toISOString().split('T')[0],
+                    time: dt.toTimeString().split(' ')[0],
+                };
+            });
+
+            // 4. Process and group records using existing logic
+            const processed = processAttendanceRecords(records);
+
+            // 5. Save to database
+            const biometricIds = [...new Set(processed.map(r => r.biometricId))];
+            const employees = await prisma.employee.findMany({
+                where: { biometricId: { in: biometricIds } },
+                select: { id: true, biometricId: true },
+            });
+            const bioToEmpId = new Map(employees.map(e => [e.biometricId, e.id]));
+
+            let inserted = 0;
+            let skipped = 0;
+            let unmapped = 0;
+
+            for (const record of processed) {
+                const empId = bioToEmpId.get(record.biometricId);
+                if (!empId) { unmapped++; continue; }
+
+                try {
+                    await prisma.attendance.upsert({
+                        where: {
+                            employeeId_date: {
+                                employeeId: empId,
+                                date: new Date(record.date),
+                            },
+                        },
+                        update: {
+                            checkIn: record.checkIn,
+                            checkOut: record.checkOut,
+                            day: record.day,
+                            totalWorkingHours: record.totalWorkingHours,
+                            isLate: record.isLate,
+                            lateBy: record.lateBy,
+                            overtime: record.overtime,
+                            otTime: record.otTime,
+                            status: 'PRESENT',
+                        },
+                        create: {
+                            employeeId: empId,
+                            date: new Date(record.date),
+                            day: record.day,
+                            checkIn: record.checkIn,
+                            checkOut: record.checkOut,
+                            totalWorkingHours: record.totalWorkingHours,
+                            isLate: record.isLate,
+                            lateBy: record.lateBy,
+                            overtime: record.overtime,
+                            otTime: record.otTime,
+                            status: 'PRESENT',
+                        },
+                    });
+                    inserted++;
+                } catch {
+                    skipped++;
+                }
+            }
+            
+            // Disconnect safely
+            await zkInstance.disconnect();
+
+            res.json({
+                success: true,
+                message: 'Device sync complete',
+                data: {
+                    totalRecords: records.length,
+                    processedDays: processed.length,
+                    inserted,
+                    skipped,
+                    unmappedEmployees: unmapped,
+                },
+            });
+        } catch (error: any) {
+            if (zkInstance) {
+                try { await zkInstance.disconnect(); } catch (e) {}
+            }
+            throw new BadRequestError(`Failed to sync with device: ${error.message || 'Connection Timeout'}`);
+        }
     })
 );
 

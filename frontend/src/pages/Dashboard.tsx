@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import LoginForm from '../components/LoginForm';
 import {
   Users, Calendar, Clock, DollarSign, Megaphone,
-  LogOut, Shield, Building, User, ChevronRight,
+  LogOut, Shield, ChevronRight,
   Home, FileText, BarChart3, Loader2
 } from 'lucide-react';
 import { employeeApi, leaveApi, announcementApi, type Employee, type Leave, type Announcement } from '../services/api';
+import { AttendancePanel } from '../components/AttendancePanel';
 
 // ─── Dashboard Page ──────────────────────────────────────────
 
@@ -180,7 +182,10 @@ const Dashboard: React.FC = () => {
             {activeTab === 'leaves' && (
               <LeavesPanel leaves={leaves} role={role} onRefresh={loadDashboardData} />
             )}
-            {['attendance', 'salary', 'reports'].includes(activeTab) && (
+            {activeTab === 'attendance' && (
+              <AttendancePanel user={user} employees={employees} />
+            )}
+            {['salary', 'reports'].includes(activeTab) && (
               <ComingSoonPanel title={navItems.find(n => n.id === activeTab)?.label || activeTab} />
             )}
           </>
@@ -273,7 +278,9 @@ const OverviewPanel: React.FC<OverviewProps> = ({
 
 // ─── Employees Panel ─────────────────────────────────────────
 
-const EmployeesPanel: React.FC<{ employees: Employee[]; role: string }> = ({ employees, role }) => (
+const EmployeesPanel: React.FC<{ employees: Employee[]; role: string }> = ({ employees, role }) => {
+  const navigate = useNavigate();
+  return (
   <div>
     <div className="flex items-center justify-between mb-6">
       <h2 className="text-2xl font-bold text-slate-900">
@@ -283,7 +290,11 @@ const EmployeesPanel: React.FC<{ employees: Employee[]; role: string }> = ({ emp
     </div>
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {employees.map(emp => (
-        <div key={emp.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition-all group cursor-pointer">
+        <div
+          key={emp.id}
+          onClick={() => navigate(`/profile/${emp.id}`)}
+          className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md hover:border-blue-200 transition-all group cursor-pointer"
+        >
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-bold text-lg shadow-md">
               {emp.name.charAt(0)}
@@ -299,7 +310,8 @@ const EmployeesPanel: React.FC<{ employees: Employee[]; role: string }> = ({ emp
       ))}
     </div>
   </div>
-);
+  );
+};
 
 // ─── Announcements Panel ─────────────────────────────────────
 

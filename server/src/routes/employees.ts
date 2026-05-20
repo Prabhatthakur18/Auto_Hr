@@ -226,6 +226,7 @@ router.post(
         const employee = await prisma.employee.create({
             data: {
                 ...employeeData,
+                skills: employeeData.skills ? JSON.stringify(employeeData.skills) : undefined,
                 joinDate: joinDate ? new Date(joinDate) : undefined,
             },
         });
@@ -271,7 +272,10 @@ router.put(
             where: { id },
             data: {
                 ...updateData,
+                skills: updateData.skills ? JSON.stringify(updateData.skills) : undefined,
                 joinDate: joinDate ? new Date(joinDate) : undefined,
+                // Explicitly handle null to clear the manager relation
+                managerId: 'managerId' in req.body ? (req.body.managerId ?? null) : undefined,
             },
         });
 
