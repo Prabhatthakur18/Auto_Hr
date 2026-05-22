@@ -209,3 +209,12 @@ enum AnnouncementPriority {
   HIGH
   URGENT
 }
+
+model Holiday {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  date      DateTime @unique @db.Date
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("holidays")
+}
