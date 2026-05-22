@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, Mail, Phone, Calendar, Building2, Users,
   Loader2, AlertCircle, Briefcase, GraduationCap, Sparkles
@@ -46,8 +46,16 @@ type Tab = 'about' | 'performance' | 'leaves' | 'attendance';
 const Profile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>('about');
+
+  // Read ?tab= query param to auto-activate the correct tab
+  const initialTab = (() => {
+    const param = new URLSearchParams(location.search).get('tab');
+    if (param === 'leaves' || param === 'performance' || param === 'attendance') return param as Tab;
+    return 'about' as Tab;
+  })();
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [employee, setEmployee] = useState<EmployeeDetail | null>(null);
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [kras, setKras] = useState<Kra[]>([]);
@@ -262,7 +270,7 @@ const Profile: React.FC = () => {
             onRefresh={refreshPerformance}
           />
         )}
-        {activeTab === 'leaves' && <LeavesTab leaves={leaves} isHR={isHR} onRefresh={loadProfile} />}
+        {activeTab === 'leaves' && <LeavesTab leaves={leaves} employee={employee} isHR={isHR} onRefresh={loadProfile} />}
         {activeTab === 'attendance' && <AttendanceTab employeeId={employeeId} isHR={isHR} />}
       </div>
     </div>
@@ -272,8 +280,10 @@ const Profile: React.FC = () => {
 // ─── About Section (inline, no separate file needed) ─────────
 
 const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefresh: () => void }> = ({ employee, isHR, onRefresh }) => {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
   const [allEmployees, setAllEmployees] = useState<{ id: number; name: string }[]>([]);
   const [form, setForm] = useState({
     bio: employee.bio || '',
@@ -336,6 +346,19 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
     }
   };
 
+  const handleDeactivate = async () => {
+    if (!window.confirm(`Are you sure you want to deactivate employee "${employee.name}"?`)) return;
+    setDeactivating(true);
+    try {
+      await employeeApi.delete(employee.id);
+      navigate('/');
+    } catch (err: any) {
+      alert(err.message || 'Failed to deactivate employee');
+    } finally {
+      setDeactivating(false);
+    }
+  };
+
   const skills: string[] = (() => {
     if (Array.isArray(employee.skills)) return employee.skills as string[];
     if (typeof employee.skills === 'string') {
@@ -348,7 +371,15 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
     <div className="space-y-6">
       {/* Action */}
       {isHR && !editing && (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={handleDeactivate}
+            disabled={deactivating}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {deactivating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Deactivate Employee
+          </button>
           <button
             onClick={startEditing}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors"

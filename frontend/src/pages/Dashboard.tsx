@@ -5,7 +5,9 @@ import LoginForm from '../components/LoginForm';
 import {
   Users, Calendar, Clock, DollarSign, Megaphone,
   LogOut, Shield, ChevronRight,
-  Home, FileText, BarChart3, Loader2
+  Home, FileText, BarChart3, Loader2,
+  CheckCircle, XCircle, MessageSquare, X, Send, AlertTriangle,
+  UserPlus, Search, Filter, Trash2
 } from 'lucide-react';
 import { employeeApi, leaveApi, announcementApi, type Employee, type Leave, type Announcement } from '../services/api';
 import { AttendancePanel } from '../components/AttendancePanel';
@@ -174,13 +176,13 @@ const Dashboard: React.FC = () => {
               />
             )}
             {activeTab === 'employees' && (
-              <EmployeesPanel employees={employees} role={role} />
+              <EmployeesPanel employees={employees} role={role} onRefresh={loadDashboardData} />
             )}
             {activeTab === 'announcements' && (
               <AnnouncementsPanel announcements={announcements} role={role} />
             )}
             {activeTab === 'leaves' && (
-              <LeavesPanel leaves={leaves} role={role} onRefresh={loadDashboardData} />
+              <LeavesPanel leaves={leaves} role={role} user={user} onRefresh={loadDashboardData} />
             )}
             {activeTab === 'attendance' && (
               <AttendancePanel user={user} employees={employees} />
@@ -278,38 +280,425 @@ const OverviewPanel: React.FC<OverviewProps> = ({
 
 // ─── Employees Panel ─────────────────────────────────────────
 
-const EmployeesPanel: React.FC<{ employees: Employee[]; role: string }> = ({ employees, role }) => {
+interface EmployeesPanelProps {
+  employees: Employee[];
+  role: string;
+  onRefresh: () => void;
+}
+
+const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefresh }) => {
   const navigate = useNavigate();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [deptFilter, setDeptFilter] = useState('ALL');
+  
+  // Add employee modal states
+  const [showModal, setShowModal] = useState(false);
+  const [name, setName] = useState('');
+  const [biometricId, setBiometricId] = useState('');
+  const [position, setPosition] = useState('');
+  const [department, setDepartment] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [employeeType, setEmployeeType] = useState('Full-time');
+  const [createUser, setCreateUser] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [systemRole, setSystemRole] = useState<'EMPLOYEE' | 'MANAGER' | 'HR'>('EMPLOYEE');
+  
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  // Extract unique departments for filtering
+  const departments = ['ALL', ...Array.from(new Set(employees.map(e => e.department).filter(Boolean)))];
+
+  // Filtered employees
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (emp.position && emp.position.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+    const matchesDept = deptFilter === 'ALL' || emp.department === deptFilter;
+    
+    return matchesSearch && matchesDept;
+  });
+
+  const resetForm = () => {
+    setName('');
+    setBiometricId('');
+    setPosition('');
+    setDepartment('');
+    setEmail('');
+    setPhone('');
+    setEmployeeType('Full-time');
+    setCreateUser(false);
+    setUsername('');
+    setPassword('');
+    setSystemRole('EMPLOYEE');
+    setError('');
+  };
+
+  const handleCreateEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError('Employee name is required');
+      return;
+    }
+    if (createUser && (!username.trim() || !password.trim())) {
+      setError('Username and password are required for user account creation');
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+
+    try {
+      const payload: any = {
+        name,
+        position: position || undefined,
+        department: department || undefined,
+        email: email || undefined,
+        phone: phone || undefined,
+        employeeType: employeeType || undefined,
+        biometricId: biometricId ? parseInt(biometricId, 10) : undefined,
+      };
+
+      if (createUser) {
+        payload.createUser = true;
+        payload.username = username;
+        payload.password = password;
+        payload.role = systemRole;
+      }
+
+      const res = await employeeApi.create(payload);
+      if (res.success) {
+        setShowModal(false);
+        resetForm();
+        onRefresh();
+      } else {
+        setError('Failed to create employee profile');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error occurred while creating employee');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-  <div>
-    <div className="flex items-center justify-between mb-6">
-      <h2 className="text-2xl font-bold text-slate-900">
-        {role === 'EMPLOYEE' ? 'My Profile' : 'Employees'}
-      </h2>
-      <span className="text-sm text-slate-500">{employees.length} {employees.length === 1 ? 'person' : 'people'}</span>
-    </div>
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {employees.map(emp => (
-        <div
-          key={emp.id}
-          onClick={() => navigate(`/profile/${emp.id}`)}
-          className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md hover:border-blue-200 transition-all group cursor-pointer"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-bold text-lg shadow-md">
-              {emp.name.charAt(0)}
+    <div>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">
+            {role === 'EMPLOYEE' ? 'My Profile' : 'Employees'}
+          </h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {filteredEmployees.length} of {employees.length} {employees.length === 1 ? 'employee' : 'employees'} listed
+          </p>
+        </div>
+        
+        {role === 'HR' && (
+          <button
+            onClick={() => { resetForm(); setShowModal(true); }}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm shadow-blue-500/10 self-start md:self-auto"
+          >
+            <UserPlus className="w-4 h-4" /> Add Employee
+          </button>
+        )}
+      </div>
+
+      {/* Search and Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by name, position or email..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 shadow-sm transition-all"
+          />
+        </div>
+        
+        <div className="flex items-center gap-2 bg-white px-3 py-2 border border-slate-200 rounded-xl shadow-sm min-w-[160px]">
+          <Filter className="w-4 h-4 text-slate-400" />
+          <select
+            value={deptFilter}
+            onChange={e => setDeptFilter(e.target.value)}
+            className="w-full text-xs font-semibold text-slate-600 bg-transparent border-none outline-none focus:ring-0 cursor-pointer"
+          >
+            {departments.map(d => (
+              <option key={d} value={d || ''}>
+                {d === 'ALL' ? 'All Departments' : d}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Employees Grid */}
+      {filteredEmployees.length === 0 ? (
+        <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-100 shadow-sm">
+          <Users className="w-12 h-12 mx-auto mb-3 opacity-50 text-slate-400" />
+          <p>No matching employees found</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 animate-fadeIn">
+          {filteredEmployees.map(emp => (
+            <div
+              key={emp.id}
+              onClick={() => navigate(`/profile/${emp.id}`)}
+              className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md hover:border-blue-200 transition-all group cursor-pointer flex items-center justify-between"
+            >
+              <div className="flex items-center gap-4 min-w-0 flex-1">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-bold text-lg shadow-md flex-shrink-0">
+                  {emp.name.charAt(0)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+                    {emp.name}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate mt-0.5">{emp.position || 'No position set'}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{emp.department || 'No department'}</p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all ml-3 flex-shrink-0" />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-900 truncate">{emp.name}</p>
-              <p className="text-xs text-slate-500 truncate">{emp.position || 'No position set'}</p>
-              <p className="text-xs text-slate-400">{emp.department || ''}</p>
+          ))}
+        </div>
+      )}
+
+      {/* Add Employee Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => { if (!submitting) setShowModal(false); }} />
+          
+          {/* Dialog Box */}
+          <div className="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden animate-scaleIn max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 flex-shrink-0">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-blue-500" />
+                Add New Employee Profile
+              </h3>
+              <button
+                disabled={submitting}
+                onClick={() => setShowModal(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+
+            <form onSubmit={handleCreateEmployee} className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Employee details */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. John Doe"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Biometric ID / EnNo
+                  </label>
+                  <input
+                    type="number"
+                    value={biometricId}
+                    onChange={e => setBiometricId(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. 48"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Employee Type
+                  </label>
+                  <select
+                    value={employeeType}
+                    onChange={e => setEmployeeType(e.target.value)}
+                    disabled={submitting}
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all cursor-pointer bg-white"
+                  >
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Intern">Intern</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Position / Designation
+                  </label>
+                  <input
+                    type="text"
+                    value={position}
+                    onChange={e => setPosition(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. Software Engineer"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Department
+                  </label>
+                  <input
+                    type="text"
+                    value={department}
+                    onChange={e => setDepartment(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. Engineering"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. john@example.com"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. +91 99999 88888"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-400"
+                  />
+                </div>
+              </div>
+
+              {/* Checkbox: Create login account */}
+              <div className="pt-2">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={createUser}
+                    onChange={e => setCreateUser(e.target.checked)}
+                    disabled={submitting}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Create User Account (System Access)
+                  </span>
+                </label>
+              </div>
+
+              {/* User account details */}
+              {createUser && (
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-4 animate-fadeIn">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                        Username *
+                      </label>
+                      <input
+                        type="text"
+                        required={createUser}
+                        value={username}
+                        onChange={e => setUsername(e.target.value)}
+                        disabled={submitting}
+                        placeholder="Username for login"
+                        className="w-full text-slate-800 bg-white text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                        Password *
+                      </label>
+                      <input
+                        type="password"
+                        required={createUser}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        disabled={submitting}
+                        placeholder="Min 6 characters"
+                        className="w-full text-slate-800 bg-white text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-400"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                        Access Role
+                      </label>
+                      <select
+                        value={systemRole}
+                        onChange={e => setSystemRole(e.target.value as any)}
+                        disabled={submitting}
+                        className="w-full text-slate-800 bg-white text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all cursor-pointer"
+                      >
+                        <option value="EMPLOYEE">Employee (Standard Access)</option>
+                        <option value="MANAGER">Manager (Team Approval/Performance)</option>
+                        <option value="HR">HR Admin (Full Access)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="bg-red-50 border border-red-100 text-red-600 rounded-xl p-3 text-xs flex gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <p>{error}</p>
+                </div>
+              )}
+            </form>
+
+            <div className="flex items-center gap-3 p-5 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => setShowModal(false)}
+                className="flex-1 px-4 py-2.5 bg-white border border-slate-300 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                onClick={handleCreateEmployee}
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm shadow-blue-500/10 transition-all"
+              >
+                {submitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {submitting ? 'Creating...' : 'Create Employee'}
+              </button>
+            </div>
           </div>
         </div>
-      ))}
+      )}
     </div>
-  </div>
   );
 };
 
@@ -353,75 +742,214 @@ const AnnouncementsPanel: React.FC<{ announcements: Announcement[]; role: string
 
 // ─── Leaves Panel ────────────────────────────────────────────
 
-const LeavesPanel: React.FC<{ leaves: Leave[]; role: string; onRefresh: () => void }> = ({ leaves, role, onRefresh }) => {
-  const handleApprove = async (id: number) => {
-    try {
-      await leaveApi.approve(id);
-      onRefresh();
-    } catch (err) {
-      console.error('Failed to approve:', err);
+const LeavesPanel: React.FC<{ leaves: Leave[]; role: string; user: any; onRefresh: () => void }> = ({ leaves, role, user, onRefresh }) => {
+  const navigate = useNavigate();
+  const [activeLeave, setActiveLeave] = useState<Leave | null>(null);
+  const [actionType, setActionType] = useState<'APPROVE' | 'REJECT' | null>(null);
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
+  const [category, setCategory] = useState<'TEAM' | 'MY'>('TEAM');
+
+  const isManagement = role === 'MANAGER' || role === 'HR';
+
+  const filteredLeaves = leaves.filter(l => {
+    // 1. Status Filter
+    if (filter !== 'ALL' && l.status !== filter) return false;
+
+    // 2. Category Filter (for Managers and HR with linked employee profiles)
+    if (isManagement && user?.employeeId) {
+      if (category === 'MY') {
+        return l.employeeId === user.employeeId;
+      } else {
+        return l.employeeId !== user.employeeId;
+      }
     }
+
+    return true;
+  });
+
+  const openReviewModal = (leave: Leave, type: 'APPROVE' | 'REJECT') => {
+    setActiveLeave(leave);
+    setActionType(type);
+    setComment('');
+    setError('');
   };
 
-  const handleReject = async (id: number) => {
+  const handleConfirmAction = async () => {
+    if (!activeLeave || !actionType) return;
+    setSubmitting(true);
+    setError('');
     try {
-      await leaveApi.reject(id);
+      if (actionType === 'APPROVE') {
+        await leaveApi.approve(activeLeave.id, comment || undefined);
+      } else {
+        await leaveApi.reject(activeLeave.id, comment || undefined);
+      }
+      setActiveLeave(null);
+      setActionType(null);
       onRefresh();
-    } catch (err) {
-      console.error('Failed to reject:', err);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update leave status');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-slate-900 mb-6">Leave Management</h2>
-      {leaves.length === 0 ? (
-        <div className="text-center py-16 text-slate-400">
-          <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>No leave records</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Leave Management</h2>
+          {role === 'EMPLOYEE' && (
+            <p className="text-sm text-slate-500 mt-0.5">View your leave history. Use the button to apply.</p>
+          )}
+          {isManagement && (
+            <p className="text-sm text-slate-500 mt-0.5">
+              {category === 'TEAM'
+                ? role === 'HR'
+                  ? 'Review and manage all employee leave requests.'
+                  : 'Review and manage your team\'s leave requests.'
+                : 'View your own leave application history and status.'}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          {/* Apply button for users with linked employee profile */}
+          {user?.employeeId && (
+            <button
+              onClick={() => navigate(`/profile/${user.employeeId}?tab=leaves`)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm shadow-blue-500/10"
+            >
+              <Calendar className="w-4 h-4" /> Apply Leave
+            </button>
+          )}
+
+          {/* Filters */}
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+            {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  filter === f
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {f.charAt(0) + f.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Category Tabs for Management */}
+      {isManagement && user?.employeeId && (
+        <div className="flex border-b border-slate-200 mb-6 gap-6">
+          <button
+            onClick={() => setCategory('TEAM')}
+            className={`pb-3 text-sm font-semibold relative transition-all ${
+              category === 'TEAM'
+                ? 'text-blue-600'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            {role === 'HR' ? 'Employee Leaves' : 'Team Leaves'}
+            {category === 'TEAM' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
+            )}
+          </button>
+          <button
+            onClick={() => setCategory('MY')}
+            className={`pb-3 text-sm font-semibold relative transition-all ${
+              category === 'MY'
+                ? 'text-blue-600'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            My Leaves
+            {category === 'MY' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
+            )}
+          </button>
+        </div>
+      )}
+
+      {filteredLeaves.length === 0 ? (
+        <div className="text-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-100 shadow-sm">
+          <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50 text-slate-400" />
+          <p>No leave records found</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {leaves.map(leave => (
-            <div key={leave.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${leave.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-500' :
-                      leave.status === 'REJECTED' ? 'bg-red-50 text-red-500' :
-                        'bg-amber-50 text-amber-500'
-                    }`}>
+          {filteredLeaves.map(leave => (
+            <div key={leave.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:border-slate-200 transition-all">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                    leave.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-500' :
+                    leave.status === 'REJECTED' ? 'bg-red-50 text-red-500' :
+                    'bg-amber-50 text-amber-500'
+                  }`}>
                     <Calendar className="w-5 h-5" />
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
-                      {leave.employee?.name || 'You'} — {leave.type}
+                      {leave.employee?.name || 'Employee'} — <span className="text-slate-600">{leave.type}</span>
                     </p>
-                    <p className="text-xs text-slate-500">
-                      {new Date(leave.startDate).toLocaleDateString('en-IN')} → {new Date(leave.endDate).toLocaleDateString('en-IN')} ({leave.days} day{leave.days > 1 ? 's' : ''})
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {new Date(leave.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {' → '}
+                      {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {' · '}
+                      <span className="font-medium text-slate-700">{leave.days} day{leave.days > 1 ? 's' : ''}</span>
                     </p>
-                    {leave.reason && <p className="text-xs text-slate-400 mt-1">{leave.reason}</p>}
+                    {leave.reason && (
+                      <p className="text-xs text-slate-600 mt-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 italic">
+                        "{leave.reason}"
+                      </p>
+                    )}
+                    {leave.comment && (
+                      <div className="flex gap-1.5 items-start text-xs text-slate-500 mt-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                        <MessageSquare className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
+                        <p>
+                          <span className="font-semibold text-slate-700">Review comment:</span> "{leave.comment}"
+                          {leave.approvedBy && (
+                            <span className="text-slate-400 block mt-0.5">by {leave.approvedBy.username}</span>
+                          )}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${leave.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600' :
-                      leave.status === 'REJECTED' ? 'bg-red-50 text-red-600' :
-                        'bg-amber-50 text-amber-600'
-                    }`}>
+
+                <div className="flex items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                    leave.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                    leave.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' :
+                    'bg-amber-50 text-amber-600 border-amber-100'
+                  }`}>
                     {leave.status}
                   </span>
-                  {leave.status === 'PENDING' && (role === 'HR' || role === 'MANAGER') && (
-                    <div className="flex gap-1 ml-2">
+                  
+                  {leave.status === 'PENDING' && 
+                   (role === 'HR' || role === 'MANAGER') && 
+                   leave.employeeId !== user?.employeeId && (
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => handleApprove(leave.id)}
-                        className="px-3 py-1 text-xs font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                        onClick={() => openReviewModal(leave, 'APPROVE')}
+                        className="px-3 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors flex items-center gap-1 shadow-sm shadow-emerald-500/10"
                       >
-                        Approve
+                        <CheckCircle className="w-3.5 h-3.5" /> Approve
                       </button>
                       <button
-                        onClick={() => handleReject(leave.id)}
-                        className="px-3 py-1 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                        onClick={() => openReviewModal(leave, 'REJECT')}
+                        className="px-3 py-1.5 text-xs font-semibold bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors flex items-center gap-1 shadow-sm shadow-red-500/10"
                       >
-                        Reject
+                        <XCircle className="w-3.5 h-3.5" /> Reject
                       </button>
                     </div>
                   )}
@@ -429,6 +957,99 @@ const LeavesPanel: React.FC<{ leaves: Leave[]; role: string; onRefresh: () => vo
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Review Dialog Modal */}
+      {activeLeave && actionType && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => { if (!submitting) { setActiveLeave(null); setActionType(null); } }} />
+          
+          {/* Dialog Box */}
+          <div className="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-scaleIn">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                {actionType === 'APPROVE' ? (
+                  <CheckCircle className="w-5 h-5 text-emerald-500" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-red-500" />
+                )}
+                {actionType === 'APPROVE' ? 'Approve Leave Request' : 'Reject Leave Request'}
+              </h3>
+              <button
+                disabled={submitting}
+                onClick={() => { setActiveLeave(null); setActionType(null); }}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Summary */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs space-y-1.5">
+                <p className="text-slate-500">Employee: <span className="font-semibold text-slate-800">{activeLeave.employee?.name}</span></p>
+                <p className="text-slate-500">Leave Type: <span className="font-semibold text-slate-800">{activeLeave.type}</span></p>
+                <p className="text-slate-500">Dates: <span className="font-semibold text-slate-800">
+                  {new Date(activeLeave.startDate).toLocaleDateString('en-IN')} → {new Date(activeLeave.endDate).toLocaleDateString('en-IN')} ({activeLeave.days} days)
+                </span></p>
+                {activeLeave.reason && (
+                  <p className="text-slate-500 mt-2 italic pt-1 border-t border-slate-200/60">
+                    Reason: "{activeLeave.reason}"
+                  </p>
+                )}
+              </div>
+
+              {/* Comment Text Area */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                  Review Comment (Optional)
+                </label>
+                <textarea
+                  value={comment}
+                  onChange={e => setComment(e.target.value)}
+                  disabled={submitting}
+                  rows={3}
+                  placeholder={`Write comments regarding this ${actionType === 'APPROVE' ? 'approval' : 'rejection'}...`}
+                  className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 resize-none transition-all placeholder-slate-400"
+                />
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-100 text-red-600 rounded-xl p-3 text-xs flex gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <p>{error}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 p-5 border-t border-slate-100 bg-slate-50">
+              <button
+                disabled={submitting}
+                onClick={() => { setActiveLeave(null); setActionType(null); }}
+                className="flex-1 px-4 py-2.5 bg-white border border-slate-300 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={submitting}
+                onClick={handleConfirmAction}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 text-white text-sm font-semibold rounded-xl shadow-sm transition-all ${
+                  actionType === 'APPROVE'
+                    ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/10'
+                    : 'bg-red-500 hover:bg-red-600 shadow-red-500/10'
+                }`}
+              >
+                {submitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {submitting ? 'Submitting...' : actionType === 'APPROVE' ? 'Confirm Approval' : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

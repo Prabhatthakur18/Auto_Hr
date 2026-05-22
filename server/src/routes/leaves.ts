@@ -18,6 +18,7 @@ const applyLeaveSchema = z.object({
     endDate: z.string().min(1, 'End date is required'),
     days: z.number().int().min(1),
     reason: z.string().optional(),
+    approverIds: z.string().optional(),
 });
 
 const leaveActionSchema = z.object({
@@ -33,20 +34,27 @@ router.get(
         const scope = req.dataScope!;
         const status = req.query['status'] as string | undefined;
         const employeeId = req.query['employeeId'] as string | undefined;
+        const currentUser = req.user!;
 
         // Build scope filter
-        let where: Record<string, unknown> = {};
+        let where: any = {};
 
         if (scope.type === 'self') {
-            where.employeeId = scope.employeeId;
+            where.OR = [
+                { employeeId: scope.employeeId },
+                { approverIds: { contains: `,${currentUser.userId},` } }
+            ];
         } else if (scope.type === 'team') {
-            // Manager: own leaves + team leaves
+            // Manager: own leaves + team leaves + leaves where they are listed in approverIds
             const teamIds = await prisma.employee.findMany({
                 where: { managerId: scope.employeeId! },
                 select: { id: true },
             });
             const ids = [scope.employeeId!, ...teamIds.map(t => t.id)];
-            where.employeeId = { in: ids };
+            where.OR = [
+                { employeeId: { in: ids } },
+                { approverIds: { contains: `,${currentUser.userId},` } }
+            ];
         }
         // HR: no filter (sees all)
 
@@ -76,11 +84,18 @@ router.post(
     '/',
     validate(applyLeaveSchema),
     asyncHandler(async (req, res) => {
-        const { type, startDate, endDate, days, reason } = req.body as z.infer<typeof applyLeaveSchema>;
+        const { type, startDate, endDate, days, reason, approverIds } = req.body as z.infer<typeof applyLeaveSchema>;
 
         if (!req.user?.employeeId) {
             throw new BadRequestError('No employee profile linked to this account');
         }
+
+        // Format approver IDs with commas to allow robust matching: e.g. ",2,5,"
+        const formattedApprovers = approverIds
+            ? `,${approverIds.split(',').filter(Boolean).join(',')},`
+            : null;
+
+        const isSelfManagerOrHR = req.user.role === 'HR' || req.user.role === 'MANAGER';
 
         const leave = await prisma.leave.create({
             data: {
@@ -90,6 +105,9 @@ router.post(
                 endDate: new Date(endDate),
                 days,
                 reason,
+                approverIds: formattedApprovers,
+                status: isSelfManagerOrHR ? 'APPROVED' : 'PENDING',
+                approvedById: isSelfManagerOrHR ? req.user.userId : null,
             },
         });
 
@@ -106,9 +124,12 @@ router.post(
 router.put(
     '/:id/approve',
     authorize('HR', 'MANAGER'),
+    validate(leaveActionSchema),
     asyncHandler(async (req, res) => {
         const id = parseInt(req.params['id'] as string, 10);
         if (isNaN(id)) throw new BadRequestError('Invalid leave ID');
+
+        const { reason } = req.body as z.infer<typeof leaveActionSchema>;
 
         const leave = await prisma.leave.findUnique({
             where: { id },
@@ -116,11 +137,15 @@ router.put(
         });
         if (!leave) throw new NotFoundError('Leave not found');
 
-        // Manager can only approve their team's leaves
-        if (req.user!.role === 'MANAGER') {
-            if (leave.employee.managerId !== req.user!.employeeId) {
-                throw new ForbiddenError('You can only approve your team\'s leaves');
-            }
+        const isHR = req.user!.role === 'HR';
+        const isDesignatedApprover = leave.approverIds
+            ? leave.approverIds.split(',').filter(Boolean).includes(String(req.user!.userId))
+            : false;
+        const isDirectManager = leave.employee.managerId === req.user!.employeeId;
+
+        // Either HR, direct manager, or a selected designated approver can approve
+        if (!isHR && !isDesignatedApprover && !isDirectManager) {
+            throw new ForbiddenError('You do not have permission to approve this leave');
         }
 
         const updated = await prisma.leave.update({
@@ -128,6 +153,7 @@ router.put(
             data: {
                 status: 'APPROVED',
                 approvedById: req.user!.userId,
+                comment: reason || null,
             },
         });
 
@@ -149,16 +175,23 @@ router.put(
         const id = parseInt(req.params['id'] as string, 10);
         if (isNaN(id)) throw new BadRequestError('Invalid leave ID');
 
+        const { reason } = req.body as z.infer<typeof leaveActionSchema>;
+
         const leave = await prisma.leave.findUnique({
             where: { id },
             include: { employee: true },
         });
         if (!leave) throw new NotFoundError('Leave not found');
 
-        if (req.user!.role === 'MANAGER') {
-            if (leave.employee.managerId !== req.user!.employeeId) {
-                throw new ForbiddenError('You can only reject your team\'s leaves');
-            }
+        const isHR = req.user!.role === 'HR';
+        const isDesignatedApprover = leave.approverIds
+            ? leave.approverIds.split(',').filter(Boolean).includes(String(req.user!.userId))
+            : false;
+        const isDirectManager = leave.employee.managerId === req.user!.employeeId;
+
+        // Either HR, direct manager, or a selected designated approver can reject
+        if (!isHR && !isDesignatedApprover && !isDirectManager) {
+            throw new ForbiddenError('You do not have permission to reject this leave');
         }
 
         const updated = await prisma.leave.update({
@@ -166,6 +199,7 @@ router.put(
             data: {
                 status: 'REJECTED',
                 approvedById: req.user!.userId,
+                comment: reason || null,
             },
         });
 

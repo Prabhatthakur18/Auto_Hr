@@ -88,6 +88,9 @@ export const employeeApi = {
 
     team: (id: number) =>
         request<{ team: Employee[]; count: number }>(`/employees/${id}/team`),
+
+    approversList: () =>
+        request<{ approvers: { userId: number; employeeId: number; name: string; role: string; position: string | null; department: string | null }[] }>('/employees/approvers/list'),
 };
 
 // ─── Leaves ──────────────────────────────────────────────────
@@ -98,14 +101,17 @@ export const leaveApi = {
         return request<{ leaves: Leave[] }>(`/leaves${query}`);
     },
 
-    apply: (data: { type: string; startDate: string; endDate: string; days: number; reason?: string }) =>
+    apply: (data: { type: string; startDate: string; endDate: string; days: number; reason?: string; approverIds?: string }) =>
         request<{ leave: Leave }>('/leaves', {
             method: 'POST',
             body: JSON.stringify(data),
         }),
 
-    approve: (id: number) =>
-        request<{ leave: Leave }>(`/leaves/${id}/approve`, { method: 'PUT' }),
+    approve: (id: number, reason?: string) =>
+        request<{ leave: Leave }>(`/leaves/${id}/approve`, {
+            method: 'PUT',
+            body: JSON.stringify({ reason }),
+        }),
 
     reject: (id: number, reason?: string) =>
         request<{ leave: Leave }>(`/leaves/${id}/reject`, {
@@ -299,6 +305,8 @@ export interface Leave {
     createdAt: string;
     employee?: { id: number; name: string; department: string | null };
     approvedBy?: { id: number; username: string } | null;
+    approverIds?: string | null;
+    comment?: string | null;
 }
 
 export interface Attendance {

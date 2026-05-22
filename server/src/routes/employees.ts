@@ -156,6 +156,56 @@ router.get(
     })
 );
 
+// ─── GET /api/employees/approvers/list ───────────────────────────
+// Get list of all potential approvers (Managers and HRs)
+// Available to any authenticated user
+
+router.get(
+    '/approvers/list',
+    asyncHandler(async (_req, res) => {
+        const approvers = await prisma.user.findMany({
+            where: {
+                role: { in: ['MANAGER', 'HR'] },
+                isActive: true,
+                employeeId: { not: null },
+            },
+            select: {
+                id: true, // User ID (stored in approverIds)
+                role: true,
+                username: true,
+                employee: {
+                    select: {
+                        id: true,
+                        name: true,
+                        position: true,
+                        department: true,
+                    },
+                },
+            },
+            orderBy: {
+                employee: {
+                    name: 'asc',
+                },
+            },
+        });
+
+        // Format nicely for frontend
+        const list = approvers.map(a => ({
+            userId: a.id,
+            employeeId: a.employee!.id,
+            name: a.employee!.name,
+            role: a.role,
+            position: a.employee!.position,
+            department: a.employee!.department,
+        }));
+
+        res.json({
+            success: true,
+            data: { approvers: list },
+        });
+    })
+);
+
 // ─── GET /api/employees/:id ──────────────────────────────────
 // Full employee profile (all data)
 

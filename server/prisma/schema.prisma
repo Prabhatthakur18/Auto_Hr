@@ -89,6 +89,8 @@ model Leave {
   updatedAt    DateTime    @updatedAt @map("updated_at")
   approvedBy   User?       @relation("ApprovedBy", fields: [approvedById], references: [id])
   employee     Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approverIds  String?     @map("approver_ids") @db.VarChar(500)
+  comment      String?     @db.Text
 
   @@index([approvedById], map: "leaves_approved_by_id_fkey")
   @@index([employeeId], map: "leaves_employee_id_fkey")
