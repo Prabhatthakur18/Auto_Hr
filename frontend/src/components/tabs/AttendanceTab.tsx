@@ -215,11 +215,13 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR }
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           {[
             { label: 'Present', value: summary.present, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/15' },
             { label: 'Absent', value: summary.absent, color: 'text-red-400 bg-red-500/10 border-red-500/15' },
             { label: 'Late Days', value: summary.lateDays, color: 'text-amber-400 bg-amber-500/10 border-amber-500/15' },
+            { label: 'Grace Lates', value: `${summary.graceLateDays}/3`, color: 'text-orange-400 bg-orange-500/10 border-orange-500/15' },
+            { label: 'Avg Late Time', value: `${summary.avgLateMinutes} min`, color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/15' },
             { label: 'Overtime Days', value: summary.overtimeDays, color: 'text-purple-400 bg-purple-500/10 border-purple-500/15' },
           ].map((stat) => (
             <div key={stat.label} className={`rounded-2xl p-4 text-center border ${stat.color}`}>
@@ -272,6 +274,10 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR }
                         <span className="text-xs font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full">
                           Late ({record.lateBy})
                         </span>
+                      ) : record.isGraceLate ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-full">
+                          Grace Late ({record.lateBy})
+                        </span>
                       ) : (
                         <span className="text-slate-500">—</span>
                       )}
@@ -290,10 +296,20 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR }
                         className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
                           record.status === 'PRESENT'
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/15'
-                            : 'bg-red-500/10 text-red-400 border-red-500/15'
+                            : record.status === 'ABSENT'
+                            ? 'bg-red-500/10 text-red-400 border-red-500/15'
+                            : record.status === 'HOLIDAY'
+                            ? 'bg-blue-500/10 text-blue-400 border-blue-500/15'
+                            : record.status === 'ON_LEAVE'
+                            ? 'bg-purple-500/10 text-purple-400 border-purple-500/15'
+                            : 'bg-slate-500/10 text-slate-400 border-slate-500/15'
                         }`}
                       >
-                        {record.status}
+                        {record.status === 'HOLIDAY' && record.holidayName
+                          ? `HOLIDAY (${record.holidayName})`
+                          : record.status === 'ON_LEAVE' && record.leaveType
+                          ? `LEAVE (${record.leaveType})`
+                          : record.status}
                       </span>
                     </td>
                   </tr>

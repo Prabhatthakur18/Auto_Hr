@@ -198,36 +198,251 @@ router.get(
         const startDate = req.query['startDate'] as string | undefined;
         const endDate = req.query['endDate'] as string | undefined;
 
-        let dateFilter: Record<string, unknown> = {};
+        let start: Date;
+        let end: Date;
+
         if (month) {
             const [year, mon] = month.split('-').map(Number);
-            const start = new Date(year!, mon! - 1, 1);
-            const end = new Date(year!, mon!, 0);
-            dateFilter = { date: { gte: start, lte: end } };
+            const lastDay = new Date(year!, mon!, 0).getDate();
+            const startStr = `${year}-${String(mon).padStart(2, '0')}-01T00:00:00.000Z`;
+            const endStr = `${year}-${String(mon).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`;
+            start = new Date(startStr);
+            end = new Date(endStr);
         } else if (startDate && endDate) {
-            dateFilter = { date: { gte: new Date(startDate), lte: new Date(endDate) } };
+            start = new Date(`${startDate}T00:00:00.000Z`);
+            end = new Date(`${endDate}T23:59:59.999Z`);
+        } else {
+            const d = new Date();
+            const year = d.getFullYear();
+            const mon = d.getMonth() + 1;
+            const lastDay = new Date(year, mon, 0).getDate();
+            start = new Date(`${year}-${String(mon).padStart(2, '0')}-01T00:00:00.000Z`);
+            end = new Date(`${year}-${String(mon).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`);
         }
 
         const attendance = await prisma.attendance.findMany({
-            where: { employeeId, ...dateFilter },
-            orderBy: { date: 'desc' },
+            where: {
+                employeeId,
+                date: { gte: start, lte: end },
+            },
+            orderBy: { date: 'asc' },
         });
 
-        // Monthly summary
+        const holidays = await prisma.holiday.findMany({
+            where: {
+                date: { gte: start, lte: end },
+            },
+        });
+
+        const leaves = await prisma.leave.findMany({
+            where: {
+                employeeId,
+                status: 'APPROVED',
+                startDate: { lte: end },
+                endDate: { gte: start },
+            },
+        });
+
+        const dbAttendanceMap = new Map(
+            attendance.map((a) => [a.date.toISOString().split('T')[0]!, a])
+        );
+
+        const holidayMap = new Map(
+            holidays.map((h) => [h.date.toISOString().split('T')[0]!, h.name])
+        );
+
+        const getApprovedLeaveType = (dateStr: string): string | null => {
+            const d = new Date(`${dateStr}T00:00:00.000Z`);
+            for (const leave of leaves) {
+                const s = new Date(leave.startDate);
+                s.setUTCHours(0, 0, 0, 0);
+                const e = new Date(leave.endDate);
+                e.setUTCHours(0, 0, 0, 0);
+                if (d >= s && d <= e) {
+                    return leave.type || 'Leave';
+                }
+            }
+            return null;
+        };
+
+        const getDaysInRange = (startDate: Date, endDate: Date): Date[] => {
+            const daysList: Date[] = [];
+            const current = new Date(startDate);
+            current.setUTCHours(0, 0, 0, 0);
+            const stop = new Date(endDate);
+            stop.setUTCHours(0, 0, 0, 0);
+
+            while (current <= stop) {
+                daysList.push(new Date(current));
+                current.setUTCDate(current.getUTCDate() + 1);
+            }
+            return daysList;
+        };
+
+        const getDayName = (date: Date): string => {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            return days[date.getUTCDay()] || '';
+        };
+
+        const mergedRecords: any[] = [];
+        const days = getDaysInRange(start, end);
+        const todayStr = new Date().toISOString().split('T')[0]!;
+
+        for (const day of days) {
+            const dateStr = day.toISOString().split('T')[0]!;
+            const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+            const dbRecord = dbAttendanceMap.get(dateStr);
+
+            if (dbRecord) {
+                mergedRecords.push({
+                    id: dbRecord.id,
+                    employeeId: dbRecord.employeeId,
+                    date: dateStr,
+                    day: dbRecord.day || getDayName(day),
+                    checkIn: dbRecord.checkIn,
+                    checkOut: dbRecord.checkOut,
+                    totalWorkingHours: dbRecord.totalWorkingHours,
+                    isLate: dbRecord.isLate,
+                    lateBy: dbRecord.lateBy,
+                    overtime: dbRecord.overtime,
+                    otTime: dbRecord.otTime,
+                    status: dbRecord.status,
+                    isVirtual: false,
+                    isGraceLate: false,
+                });
+            } else {
+                if (isWeekend) continue;
+
+                const holidayName = holidayMap.get(dateStr);
+                const leaveType = getApprovedLeaveType(dateStr);
+                const isPastOrToday = dateStr <= todayStr;
+
+                if (holidayName) {
+                    mergedRecords.push({
+                        id: 0,
+                        employeeId,
+                        date: dateStr,
+                        day: getDayName(day),
+                        checkIn: null,
+                        checkOut: null,
+                        totalWorkingHours: null,
+                        isLate: false,
+                        lateBy: null,
+                        overtime: false,
+                        otTime: null,
+                        status: 'HOLIDAY',
+                        holidayName,
+                        isVirtual: true,
+                        isGraceLate: false,
+                    });
+                } else if (leaveType) {
+                    mergedRecords.push({
+                        id: 0,
+                        employeeId,
+                        date: dateStr,
+                        day: getDayName(day),
+                        checkIn: null,
+                        checkOut: null,
+                        totalWorkingHours: null,
+                        isLate: false,
+                        lateBy: null,
+                        overtime: false,
+                        otTime: null,
+                        status: 'ON_LEAVE',
+                        leaveType,
+                        isVirtual: true,
+                        isGraceLate: false,
+                    });
+                } else if (isPastOrToday) {
+                    mergedRecords.push({
+                        id: 0,
+                        employeeId,
+                        date: dateStr,
+                        day: getDayName(day),
+                        checkIn: null,
+                        checkOut: null,
+                        totalWorkingHours: null,
+                        isLate: false,
+                        lateBy: null,
+                        overtime: false,
+                        otTime: null,
+                        status: 'ABSENT',
+                        isVirtual: true,
+                        isGraceLate: false,
+                    });
+                }
+            }
+        }
+
+        // Sort ascending to calculate running grace late counter chronologically
+        mergedRecords.sort((a, b) => a.date.localeCompare(b.date));
+
+        let graceLateCount = 0;
+        let totalLateMinutes = 0;
+        let lateCheckInCount = 0;
+
+        for (const record of mergedRecords) {
+            if (record.checkIn && record.status === 'PRESENT') {
+                const checkInTime = record.checkIn;
+
+                if (checkInTime > '09:30:00') {
+                    const [hrs, mins, secs] = checkInTime.split(':').map(Number);
+                    const checkInInSecs = (hrs || 0) * 3600 + (mins || 0) * 60 + (secs || 0);
+                    const baseInSecs = 9 * 3600 + 30 * 60; // 09:30:00
+                    const diffSecs = checkInInSecs - baseInSecs;
+
+                    if (diffSecs > 0) {
+                        const diffMins = Math.floor(diffSecs / 60);
+                        record.lateBy = `${diffMins} mins`;
+
+                        // If <= 5 min buffer, considered On Time
+                        if (checkInTime <= '09:35:00') {
+                            record.isLate = false;
+                            record.lateBy = null;
+                        } else {
+                            // Contribute to average late minutes (excludes on-time buffer)
+                            totalLateMinutes += diffMins;
+                            lateCheckInCount++;
+
+                            if (checkInTime <= '09:45:00') {
+                                graceLateCount++;
+                                if (graceLateCount <= 3) {
+                                    record.isLate = false;
+                                    record.isGraceLate = true;
+                                } else {
+                                    record.isLate = true;
+                                }
+                            } else {
+                                record.isLate = true;
+                            }
+                        }
+                    }
+                } else {
+                    record.isLate = false;
+                    record.lateBy = null;
+                }
+            }
+        }
+
+        // Sort back to descending order (newest first) for UI display
+        mergedRecords.sort((a, b) => b.date.localeCompare(a.date));
+
         const summary = {
-            total: attendance.length,
-            present: attendance.filter(a => a.status === 'PRESENT').length,
-            absent: attendance.filter(a => a.status === 'ABSENT').length,
-            halfDay: attendance.filter(a => a.status === 'HALF_DAY').length,
-            onLeave: attendance.filter(a => a.status === 'ON_LEAVE').length,
-            holiday: attendance.filter(a => a.status === 'HOLIDAY').length,
-            lateDays: attendance.filter(a => a.isLate).length,
-            overtimeDays: attendance.filter(a => a.overtime).length,
+            total: mergedRecords.length,
+            present: mergedRecords.filter((r) => r.status === 'PRESENT').length,
+            absent: mergedRecords.filter((r) => r.status === 'ABSENT').length,
+            halfDay: mergedRecords.filter((r) => r.status === 'HALF_DAY').length,
+            onLeave: mergedRecords.filter((r) => r.status === 'ON_LEAVE').length,
+            holiday: mergedRecords.filter((r) => r.status === 'HOLIDAY').length,
+            lateDays: mergedRecords.filter((r) => r.isLate).length,
+            graceLateDays: mergedRecords.filter((r) => r.isGraceLate).length,
+            overtimeDays: mergedRecords.filter((r) => r.overtime).length,
+            avgLateMinutes: lateCheckInCount > 0 ? Math.round(totalLateMinutes / lateCheckInCount) : 0,
         };
 
         res.json({
             success: true,
-            data: { attendance, summary },
+            data: { attendance: mergedRecords, summary },
         });
     })
 );

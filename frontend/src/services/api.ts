@@ -314,6 +314,10 @@ export interface Attendance {
     overtime: boolean;
     otTime: string | null;
     status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'ON_LEAVE' | 'HOLIDAY';
+    isGraceLate?: boolean;
+    isVirtual?: boolean;
+    holidayName?: string;
+    leaveType?: string;
 }
 
 export interface AttendanceSummary {
@@ -325,6 +329,8 @@ export interface AttendanceSummary {
     holiday: number;
     lateDays: number;
     overtimeDays: number;
+    graceLateDays: number;
+    avgLateMinutes: number;
 }
 
 export interface SalaryBreakdown {

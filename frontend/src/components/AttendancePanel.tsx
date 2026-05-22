@@ -27,9 +27,6 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  // Sync state
-  const [syncing, setSyncing] = useState(false);
-
   // Manual Adjust form state
   const [showManualForm, setShowManualForm] = useState(false);
   const [savingManual, setSavingManual] = useState(false);
@@ -99,31 +96,6 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
       setError(err.message || 'Failed to upload attendance file');
     } finally {
       setUploading(false);
-    }
-  };
-
-  const handleDeviceSync = async () => {
-    setSyncing(true);
-    setError(null);
-    setSuccessMsg(null);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:3001/api/attendance/sync-device', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to sync');
-      setSuccessMsg(`Device synced successfully! Processed ${json.data?.processedDays || 0} days of attendance.`);
-      if (selectedEmployeeId) {
-        loadAttendance();
-      }
-    } catch (err: any) {
-      setError(err.message || 'Biometric device is currently offline (Connection Timeout)');
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -199,7 +171,7 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
       {isHR && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Upload card */}
-          <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+          <div className="lg:col-span-3 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
             <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
               <Upload className="w-5 h-5 text-blue-500" />
               Upload Attendance Data Sheet
@@ -267,39 +239,6 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
                 </button>
               </div>
             </form>
-          </div>
-
-          {/* Secureye Live Connection Panel */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl p-6 shadow-sm flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-semibold px-2.5 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 rounded-full">
-                  Secureye Integration
-                </span>
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-              </div>
-              <h3 className="text-lg font-bold">Secureye S-FB4K</h3>
-              <p className="text-xs text-slate-400 mt-1">IP Address: 192.168.1.224</p>
-              <p className="text-sm text-slate-300 mt-4 leading-relaxed">
-                Connect and sync logs automatically over your local network. Zero manual sheet uploads needed.
-              </p>
-            </div>
-
-            <button
-              onClick={handleDeviceSync}
-              disabled={syncing}
-              className="w-full mt-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-sm font-bold rounded-xl transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
-            >
-              {syncing ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" /> Syncing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4" /> Trigger Auto-Sync API
-                </>
-              )}
-            </button>
           </div>
         </div>
       )}
@@ -446,16 +385,18 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
 
           {/* Monthly stats breakdown */}
           {summary && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 mb-6">
               {[
                 { label: 'Present', value: summary.present, color: 'text-emerald-600 bg-emerald-50' },
                 { label: 'Absent', value: summary.absent, color: 'text-red-600 bg-red-50' },
                 { label: 'Late Days', value: summary.lateDays, color: 'text-amber-600 bg-amber-50' },
+                { label: 'Grace Lates', value: `${summary.graceLateDays || 0}/3`, color: 'text-orange-600 bg-orange-50' },
+                { label: 'Avg Late Time', value: `${summary.avgLateMinutes || 0} min`, color: 'text-cyan-600 bg-cyan-50' },
                 { label: 'Overtime Days', value: summary.overtimeDays, color: 'text-purple-600 bg-purple-50' },
               ].map((stat) => (
                 <div key={stat.label} className={`rounded-xl p-4 text-center ${stat.color}`}>
                   <p className="text-2xl font-bold">{stat.value}</p>
-                  <p className="text-xs font-semibold opacity-80 mt-0.5">{stat.label}</p>
+                  <p className="text-xs font-semibold opacity-85 mt-0.5">{stat.label}</p>
                 </div>
               ))}
             </div>
@@ -502,6 +443,10 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
                           <span className="text-xs font-semibold px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full">
                             Late ({record.lateBy})
                           </span>
+                        ) : record.isGraceLate ? (
+                          <span className="text-xs font-semibold px-2 py-0.5 bg-orange-50 text-orange-600 rounded-full">
+                            Grace Late ({record.lateBy})
+                          </span>
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
@@ -520,10 +465,20 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
                           className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                             record.status === 'PRESENT'
                               ? 'bg-emerald-50 text-emerald-600'
-                              : 'bg-red-50 text-red-600'
+                              : record.status === 'ABSENT'
+                              ? 'bg-red-50 text-red-600'
+                              : record.status === 'HOLIDAY'
+                              ? 'bg-blue-50 text-blue-600'
+                              : record.status === 'ON_LEAVE'
+                              ? 'bg-purple-50 text-purple-600'
+                              : 'bg-slate-50 text-slate-600'
                           }`}
                         >
-                          {record.status}
+                          {record.status === 'HOLIDAY' && record.holidayName
+                            ? `HOLIDAY (${record.holidayName})`
+                            : record.status === 'ON_LEAVE' && record.leaveType
+                            ? `LEAVE (${record.leaveType})`
+                            : record.status}
                         </span>
                       </td>
                     </tr>

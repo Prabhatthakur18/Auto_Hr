@@ -75,7 +75,6 @@ const Dashboard: React.FC = () => {
     { id: 'attendance', label: 'Attendance', icon: Clock },
     { id: 'leaves', label: 'Leaves', icon: Calendar },
     { id: 'salary', label: 'Salary', icon: DollarSign },
-    { id: 'announcements', label: 'Announcements', icon: Megaphone },
     ...(role === 'HR' ? [
       { id: 'reports', label: 'Reports', icon: BarChart3 },
     ] : []),
