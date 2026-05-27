@@ -1,10 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../config/db.js';
-import { authenticate, authorize, scopeData } from '../middleware/auth.js';
+import {
+    authenticate,
+    authorize,
+    scopeData,
+    assertCanAccessEmployee,
+} from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { BadRequestError, ForbiddenError, NotFoundError } from '../utils/errors.js';
+import { BadRequestError, NotFoundError } from '../utils/errors.js';
 
 const router = Router();
 
@@ -53,17 +58,10 @@ router.get(
         const employeeId = parseInt(req.params['employeeId'] as string, 10);
         if (isNaN(employeeId)) throw new BadRequestError('Invalid employee ID');
 
-        // Data isolation
-        const scope = req.dataScope!;
-        if (scope.type === 'self' && scope.employeeId !== employeeId) {
-            throw new ForbiddenError('You can only view your own performance data');
-        }
-        if (scope.type === 'team' && scope.employeeId !== employeeId) {
-            const isReport = await prisma.employee.findFirst({
-                where: { id: employeeId, managerId: scope.employeeId! },
-            });
-            if (!isReport) throw new ForbiddenError('You can only view your team members\' data');
-        }
+        await assertCanAccessEmployee(req, employeeId, {
+            self: 'You can only view your own performance data',
+            team: 'You can only view your team members\' data',
+        });
 
         const kras = await prisma.kra.findMany({
             where: { employeeId },

@@ -1,7 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../config/db.js';
-import { authenticate, authorize, scopeData } from '../middleware/auth.js';
+import {
+    authenticate,
+    authorize,
+    scopeData,
+    assertCanAccessEmployee,
+    canReviewLeaves,
+    getScopedEmployeeIds,
+    hasFullAccess,
+} from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { NotFoundError, ForbiddenError, BadRequestError } from '../utils/errors.js';
@@ -25,6 +33,23 @@ const leaveActionSchema = z.object({
     reason: z.string().optional(), // rejection reason
 });
 
+async function canManageLeaveByHierarchy(
+    req: import('express').Request,
+    leaveEmployeeId: number
+): Promise<boolean> {
+    const currentUser = req.user;
+    if (!currentUser?.employeeId || leaveEmployeeId === currentUser.employeeId) {
+        return false;
+    }
+
+    const scopedIds = await getScopedEmployeeIds(req);
+    if (!scopedIds) {
+        return true;
+    }
+
+    return scopedIds.includes(leaveEmployeeId);
+}
+
 // ─── GET /api/leaves ─────────────────────────────────────────
 // List leaves — scoped by role
 
@@ -35,22 +60,30 @@ router.get(
         const status = req.query['status'] as string | undefined;
         const employeeId = req.query['employeeId'] as string | undefined;
         const currentUser = req.user!;
+        const targetEmployeeId = employeeId ? parseInt(employeeId, 10) : null;
+
+        if (employeeId && (!targetEmployeeId || Number.isNaN(targetEmployeeId))) {
+            throw new BadRequestError('Invalid employee ID');
+        }
 
         // Build scope filter
         let where: any = {};
 
-        if (scope.type === 'self') {
+        if (targetEmployeeId) {
+            await assertCanAccessEmployee(req, targetEmployeeId, {
+                self: 'You can only view your own leave records',
+                team: 'You can only view leave records for your own team members',
+            });
+
+            where.employeeId = targetEmployeeId;
+        } else if (scope.type === 'self') {
             where.OR = [
                 { employeeId: scope.employeeId },
                 { approverIds: { contains: `,${currentUser.userId},` } }
             ];
         } else if (scope.type === 'team') {
-            // Manager: own leaves + team leaves + leaves where they are listed in approverIds
-            const teamIds = await prisma.employee.findMany({
-                where: { managerId: scope.employeeId! },
-                select: { id: true },
-            });
-            const ids = [scope.employeeId!, ...teamIds.map(t => t.id)];
+            // Manager: own leaves + full team hierarchy + leaves where they are listed in approverIds
+            const ids = await getScopedEmployeeIds(req);
             where.OR = [
                 { employeeId: { in: ids } },
                 { approverIds: { contains: `,${currentUser.userId},` } }
@@ -60,9 +93,6 @@ router.get(
 
         // Optional filters
         if (status) where.status = status;
-        if (employeeId && scope.type === 'all') {
-            where.employeeId = parseInt(employeeId, 10);
-        }
 
         const leaves = await prisma.leave.findMany({
             where,
@@ -95,7 +125,7 @@ router.post(
             ? `,${approverIds.split(',').filter(Boolean).join(',')},`
             : null;
 
-        const isSelfManagerOrHR = req.user.role === 'HR' || req.user.role === 'MANAGER';
+        const isSelfApprovingRole = canReviewLeaves(req.user.role);
 
         const leave = await prisma.leave.create({
             data: {
@@ -106,8 +136,8 @@ router.post(
                 days,
                 reason,
                 approverIds: formattedApprovers,
-                status: isSelfManagerOrHR ? 'APPROVED' : 'PENDING',
-                approvedById: isSelfManagerOrHR ? req.user.userId : null,
+                status: isSelfApprovingRole ? 'APPROVED' : 'PENDING',
+                approvedById: isSelfApprovingRole ? req.user.userId : null,
             },
         });
 
@@ -123,7 +153,7 @@ router.post(
 
 router.put(
     '/:id/approve',
-    authorize('HR', 'MANAGER'),
+    authorize('HR', 'MANAGER', 'LEADERSHIP'),
     validate(leaveActionSchema),
     asyncHandler(async (req, res) => {
         const id = parseInt(req.params['id'] as string, 10);
@@ -137,14 +167,14 @@ router.put(
         });
         if (!leave) throw new NotFoundError('Leave not found');
 
-        const isHR = req.user!.role === 'HR';
+        const isGlobalReviewer = hasFullAccess(req.user!.role);
         const isDesignatedApprover = leave.approverIds
             ? leave.approverIds.split(',').filter(Boolean).includes(String(req.user!.userId))
             : false;
-        const isDirectManager = leave.employee.managerId === req.user!.employeeId;
+        const isHierarchyManager = await canManageLeaveByHierarchy(req, leave.employeeId);
 
-        // Either HR, direct manager, or a selected designated approver can approve
-        if (!isHR && !isDesignatedApprover && !isDirectManager) {
+        // Either a full-access role, hierarchy manager, or a selected designated approver can approve
+        if (!isGlobalReviewer && !isDesignatedApprover && !isHierarchyManager) {
             throw new ForbiddenError('You do not have permission to approve this leave');
         }
 
@@ -169,7 +199,7 @@ router.put(
 
 router.put(
     '/:id/reject',
-    authorize('HR', 'MANAGER'),
+    authorize('HR', 'MANAGER', 'LEADERSHIP'),
     validate(leaveActionSchema),
     asyncHandler(async (req, res) => {
         const id = parseInt(req.params['id'] as string, 10);
@@ -183,14 +213,14 @@ router.put(
         });
         if (!leave) throw new NotFoundError('Leave not found');
 
-        const isHR = req.user!.role === 'HR';
+        const isGlobalReviewer = hasFullAccess(req.user!.role);
         const isDesignatedApprover = leave.approverIds
             ? leave.approverIds.split(',').filter(Boolean).includes(String(req.user!.userId))
             : false;
-        const isDirectManager = leave.employee.managerId === req.user!.employeeId;
+        const isHierarchyManager = await canManageLeaveByHierarchy(req, leave.employeeId);
 
-        // Either HR, direct manager, or a selected designated approver can reject
-        if (!isHR && !isDesignatedApprover && !isDirectManager) {
+        // Either a full-access role, hierarchy manager, or a selected designated approver can reject
+        if (!isGlobalReviewer && !isDesignatedApprover && !isHierarchyManager) {
             throw new ForbiddenError('You do not have permission to reject this leave');
         }
 
@@ -224,7 +254,7 @@ router.delete(
         if (!leave) throw new NotFoundError('Leave not found');
 
         // Only own pending leaves can be cancelled
-        if (leave.employeeId !== req.user!.employeeId && req.user!.role !== 'HR') {
+        if (leave.employeeId !== req.user!.employeeId && !hasFullAccess(req.user!.role)) {
             throw new ForbiddenError('You can only cancel your own leaves');
         }
         if (leave.status !== 'PENDING') {

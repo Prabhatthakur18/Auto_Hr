@@ -92,6 +92,7 @@ router.post(
                     id: user.id,
                     username: user.username,
                     role: user.role,
+                    employeeId: user.employeeId,
                     employee: user.employee,
                 },
             },

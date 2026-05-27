@@ -71,13 +71,13 @@ export const employeeApi = {
 
     get: (id: number) => request<{ employee: EmployeeDetail }>(`/employees/${id}`),
 
-    create: (data: Partial<Employee> & { createUser?: boolean; username?: string; password?: string; role?: string }) =>
+    create: (data: EmployeeMutationPayload & { createUser?: boolean; username?: string; password?: string; role?: string }) =>
         request<{ employee: Employee }>('/employees', {
             method: 'POST',
             body: JSON.stringify(data),
         }),
 
-    update: (id: number, data: Partial<Employee>) =>
+    update: (id: number, data: EmployeeMutationPayload) =>
         request<{ employee: Employee }>(`/employees/${id}`, {
             method: 'PUT',
             body: JSON.stringify(data),
@@ -88,6 +88,14 @@ export const employeeApi = {
 
     team: (id: number) =>
         request<{ team: Employee[]; count: number }>(`/employees/${id}/team`),
+
+    managersList: () =>
+        request<{ managers: ManagerOption[] }>('/employees/managers/list'),
+
+    syncMasterData: () =>
+        request<{ total: number; created: number; skipped: number }>('/employees/master/sync', {
+            method: 'POST',
+        }),
 
     approversList: () =>
         request<{ approvers: { userId: number; employeeId: number; name: string; role: string; position: string | null; department: string | null }[] }>('/employees/approvers/list'),
@@ -253,10 +261,12 @@ export const performanceApi = {
 
 // ─── Types ───────────────────────────────────────────────────
 
+export type UserRole = 'EMPLOYEE' | 'MANAGER' | 'HR' | 'LEADERSHIP';
+
 export interface AuthUser {
     id: number;
     username: string;
-    role: 'EMPLOYEE' | 'MANAGER' | 'HR';
+    role: UserRole;
     employeeId: number | null;
     employee: {
         id: number;
@@ -290,7 +300,35 @@ export interface EmployeeDetail extends Employee {
     education: string | null;
     isActive: boolean;
     directReports: Employee[];
-    user: { id: number; username: string; role: string } | null;
+    managers?: Array<{ manager: { id: number; name: string; position: string | null; department: string | null } }>;
+    user: { id: number; username: string; role: UserRole } | null;
+}
+
+export interface EmployeeMutationPayload {
+    biometricId?: number | null;
+    name?: string;
+    position?: string | null;
+    department?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    joinDate?: string | null;
+    managerId?: number | null;
+    managerIds?: number[];
+    avatar?: string | null;
+    bio?: string | null;
+    skills?: string[];
+    experience?: string | null;
+    education?: string | null;
+    employeeType?: string | null;
+}
+
+export interface ManagerOption {
+    userId: number;
+    employeeId: number;
+    name: string;
+    position: string | null;
+    department: string | null;
+    role: Extract<UserRole, 'MANAGER' | 'LEADERSHIP'>;
 }
 
 export interface Leave {

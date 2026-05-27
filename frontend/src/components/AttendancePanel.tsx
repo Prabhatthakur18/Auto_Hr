@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Upload, RefreshCw, Check, AlertCircle, FileText, Plus, X, Calendar } from 'lucide-react';
-import { attendanceApi, type Employee, type Attendance } from '../services/api';
+import { attendanceApi, type Employee, type Attendance, type AuthUser } from '../services/api';
 
 interface AttendancePanelProps {
-  user: any;
+  user: AuthUser | null;
   employees: Employee[];
 }
 
 export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employees }) => {
   const isHR = user?.role === 'HR';
+  const isLeadership = user?.role === 'LEADERSHIP';
+  const isManager = user?.role === 'MANAGER';
+  const canBrowseEmployeeAttendance = isHR || isLeadership || isManager;
+  const canViewAllEmployees = isHR || isLeadership;
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [targetMonth, setTargetMonth] = useState<string>(() => {
     const d = new Date();
@@ -37,14 +41,36 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
     status: 'PRESENT' as 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'ON_LEAVE' | 'HOLIDAY',
   });
 
-  // Load employee list and default to self if not HR
+  const selfEmployee = employees.find(emp => emp.id === user?.employeeId) || null;
+  const teamEmployees = employees.filter(emp => emp.id !== user?.employeeId);
+  const sidebarSections = canViewAllEmployees
+    ? [
+        {
+          title: 'Employees',
+          employees,
+        },
+      ]
+    : isManager
+      ? [
+          {
+            title: 'My Attendance',
+            employees: selfEmployee ? [selfEmployee] : [],
+          },
+          {
+            title: 'Team Members',
+            employees: teamEmployees,
+          },
+        ]
+      : [];
+
+  // Default selection based on role scope
   useEffect(() => {
-    if (!isHR) {
-      setSelectedEmployeeId(user?.employeeId);
+    if (isManager || !canBrowseEmployeeAttendance) {
+      setSelectedEmployeeId(user?.employeeId ?? null);
     } else if (employees.length > 0 && selectedEmployeeId === null) {
       setSelectedEmployeeId(employees[0]!.id);
     }
-  }, [isHR, employees, user]);
+  }, [canBrowseEmployeeAttendance, employees, isManager, selectedEmployeeId, user]);
 
   useEffect(() => {
     if (selectedEmployeeId) {
@@ -138,7 +164,13 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Attendance Module</h2>
-          <p className="text-slate-500 mt-1">Manage and sync biometric attendance sheets</p>
+          <p className="text-slate-500 mt-1">
+            {isHR
+              ? 'Manage and sync biometric attendance sheets'
+              : isManager
+                ? 'Review attendance for yourself and your reporting team'
+                : 'View attendance logs and monthly summaries'}
+          </p>
         </div>
 
         {/* Global target month filter */}
@@ -245,35 +277,48 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
 
       {/* Grid container: Employee selection and attendance log grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Sidebar employee lists (for HR only) */}
-        {isHR && (
+        {/* Sidebar employee list for scoped attendance browsing */}
+        {canBrowseEmployeeAttendance && (
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
-            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">Employees</h4>
-            <div className="space-y-1 max-h-[450px] overflow-y-auto">
-              {employees.map((emp) => (
-                <button
-                  key={emp.id}
-                  onClick={() => setSelectedEmployeeId(emp.id)}
-                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-sm font-medium transition-all ${
-                    selectedEmployeeId === emp.id
-                      ? 'bg-blue-50 text-blue-600'
-                      : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  <span className="truncate">{emp.name}</span>
-                  <span className="text-xs text-slate-400">ID: {emp.biometricId || '—'}</span>
-                </button>
+            <div className="max-h-[450px] overflow-y-auto space-y-4">
+              {sidebarSections.map((section) => (
+                <div key={section.title} className="space-y-1">
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">
+                    {section.title}
+                  </h4>
+                  {section.employees.map((emp) => (
+                    <button
+                      key={emp.id}
+                      onClick={() => setSelectedEmployeeId(emp.id)}
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-sm font-medium transition-all ${
+                        selectedEmployeeId === emp.id
+                          ? 'bg-blue-50 text-blue-600'
+                          : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="truncate">
+                        {emp.id === user?.employeeId ? `${emp.name} (You)` : emp.name}
+                      </span>
+                      <span className="text-xs text-slate-400">ID: {emp.biometricId || '—'}</span>
+                    </button>
+                  ))}
+                  {section.employees.length === 0 && (
+                    <p className="px-2 py-1 text-xs text-slate-400 italic">
+                      No employees available
+                    </p>
+                  )}
+                </div>
               ))}
             </div>
           </div>
         )}
 
         {/* Selected Employee log panel */}
-        <div className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-100 ${isHR ? 'lg:col-span-3' : 'lg:col-span-4'}`}>
+        <div className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-100 ${canBrowseEmployeeAttendance ? 'lg:col-span-3' : 'lg:col-span-4'}`}>
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
               <Clock className="w-5 h-5 text-blue-500" />
-              {isHR
+              {canBrowseEmployeeAttendance
                 ? `Attendance Log: ${employees.find((e) => e.id === selectedEmployeeId)?.name || ''}`
                 : 'My Attendance Logs'}
             </h3>
@@ -430,7 +475,7 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {attendance.map((record) => (
-                    <tr key={record.id} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={`${record.id ?? record.date}`} className="hover:bg-slate-50/50 transition-colors">
                       <td className="py-3 px-2 font-semibold text-slate-700">
                         {new Date(record.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                       </td>

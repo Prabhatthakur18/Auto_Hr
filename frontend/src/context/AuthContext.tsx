@@ -1,8 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi, type AuthUser } from '../services/api';
 
-export type UserRole = 'HR' | 'MANAGER' | 'EMPLOYEE';
-
 interface AuthContextType {
   user: AuthUser | null;
   isLoggedIn: boolean;
@@ -61,7 +59,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await authApi.login(username, password);
       if (response.data) {
         localStorage.setItem('token', response.data.token);
-        setUser(response.data.user);
+        try {
+          const meResponse = await authApi.me();
+          if (meResponse.data?.user) {
+            setUser(meResponse.data.user);
+          } else {
+            setUser(response.data.user);
+          }
+        } catch {
+          setUser(response.data.user);
+        }
         setIsLoggedIn(true);
         return true;
       }

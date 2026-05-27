@@ -1,16 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import LoginForm from '../components/LoginForm';
 import {
   Users, Calendar, Clock, DollarSign, Megaphone,
   LogOut, Shield, ChevronRight,
   Home, FileText, BarChart3, Loader2,
   CheckCircle, XCircle, MessageSquare, X, Send, AlertTriangle,
-  UserPlus, Search, Filter, Trash2
+  UserPlus, Search, Filter, RefreshCw
 } from 'lucide-react';
-import { employeeApi, leaveApi, announcementApi, type Employee, type Leave, type Announcement } from '../services/api';
+import {
+  employeeApi,
+  leaveApi,
+  announcementApi,
+  type Employee,
+  type Leave,
+  type Announcement,
+  type AuthUser,
+  type UserRole,
+} from '../services/api';
 import { AttendancePanel } from '../components/AttendancePanel';
+import { ProfileDrawer } from '../components/ProfileDrawer';
+
+const ALL_ACCESS_ROLES: UserRole[] = ['HR', 'LEADERSHIP'];
+const MANAGEMENT_ROLES: UserRole[] = ['HR', 'LEADERSHIP', 'MANAGER'];
+
+const getRoleBadgeClasses = (role: UserRole) => (
+  role === 'HR'
+    ? 'bg-rose-500/15 text-rose-700 border border-rose-500/20'
+    : role === 'LEADERSHIP'
+      ? 'bg-amber-500/15 text-amber-800 border border-amber-500/20'
+      : role === 'MANAGER'
+        ? 'bg-teal-500/15 text-teal-800 border border-teal-500/20'
+        : 'bg-slate-500/10 text-slate-700 border border-slate-500/15'
+);
 
 // ─── Dashboard Page ──────────────────────────────────────────
 
@@ -21,6 +43,11 @@ const Dashboard: React.FC = () => {
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [profileDrawer, setProfileDrawer] = useState<{ open: boolean; employeeId: number | null; tab: 'about' | 'performance' | 'leaves' | 'attendance' }>({
+    open: false,
+    employeeId: null,
+    tab: 'about',
+  });
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -56,8 +83,8 @@ const Dashboard: React.FC = () => {
   // Show loading spinner while checking auth
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 via-amber-50 to-orange-50 flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-rose-500 animate-spin" />
       </div>
     );
   }
@@ -67,7 +94,7 @@ const Dashboard: React.FC = () => {
     return <LoginForm />;
   }
 
-  const role = user?.role || 'EMPLOYEE';
+  const role: UserRole = user?.role || 'EMPLOYEE';
   const name = user?.employee?.name || user?.username || 'User';
 
   // Define sidebar navigation based on role
@@ -77,7 +104,7 @@ const Dashboard: React.FC = () => {
     { id: 'attendance', label: 'Attendance', icon: Clock },
     { id: 'leaves', label: 'Leaves', icon: Calendar },
     { id: 'salary', label: 'Salary', icon: DollarSign },
-    ...(role === 'HR' ? [
+    ...(ALL_ACCESS_ROLES.includes(role) ? [
       { id: 'reports', label: 'Reports', icon: BarChart3 },
     ] : []),
   ];
@@ -85,34 +112,31 @@ const Dashboard: React.FC = () => {
   const pendingLeaves = leaves.filter(l => l.status === 'PENDING').length;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-amber-50 to-orange-50 flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col min-h-screen fixed">
+      <aside className="w-64 bg-white/70 backdrop-blur text-slate-800 flex flex-col min-h-screen fixed border-r border-rose-100">
         {/* Logo */}
-        <div className="p-6 border-b border-slate-700">
+        <div className="p-6 border-b border-rose-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-400 to-orange-400 flex items-center justify-center shadow-lg shadow-rose-300/40">
               <Shield className="w-5 h-5 text-white" />
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight">Auto HR</h1>
-              <p className="text-xs text-slate-400">Autoform India</p>
+              <p className="text-xs text-slate-500">Autoform India</p>
             </div>
           </div>
         </div>
 
         {/* User Info */}
-        <div className="px-6 py-4 border-b border-slate-700/50">
+        <div className="px-6 py-4 border-b border-rose-100/70">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-rose-400 to-amber-400 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-rose-200/60">
               {name.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium truncate">{name}</p>
-              <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 ${role === 'HR' ? 'bg-blue-500/20 text-blue-300' :
-                  role === 'MANAGER' ? 'bg-emerald-500/20 text-emerald-300' :
-                    'bg-purple-500/20 text-purple-300'
-                }`}>
+              <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 ${getRoleBadgeClasses(role)}`}>
                 {role}
               </span>
             </div>
@@ -126,12 +150,12 @@ const Dashboard: React.FC = () => {
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={`w-full flex items-center gap-3 px-6 py-3 text-sm font-medium transition-all relative ${activeTab === item.id
-                  ? 'text-white bg-white/10'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  ? 'text-slate-900 bg-rose-100/70'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-rose-100/40'
                 }`}
             >
               {activeTab === item.id && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-500 rounded-r-full" />
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-rose-500 rounded-r-full" />
               )}
               <item.icon className="w-5 h-5 flex-shrink-0" />
               <span>{item.label}</span>
@@ -145,10 +169,10 @@ const Dashboard: React.FC = () => {
         </nav>
 
         {/* Logout */}
-        <div className="p-4 border-t border-slate-700">
+        <div className="p-4 border-t border-rose-100">
           <button
             onClick={logout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-rose-100/40 rounded-xl transition-all"
           >
             <LogOut className="w-5 h-5" />
             Sign Out
@@ -175,13 +199,24 @@ const Dashboard: React.FC = () => {
               />
             )}
             {activeTab === 'employees' && (
-              <EmployeesPanel employees={employees} role={role} onRefresh={loadDashboardData} />
+              <EmployeesPanel
+                employees={employees}
+                role={role}
+                onRefresh={loadDashboardData}
+                onOpenProfile={(employeeId: number) => setProfileDrawer({ open: true, employeeId, tab: 'about' })}
+              />
             )}
             {activeTab === 'announcements' && (
               <AnnouncementsPanel announcements={announcements} role={role} />
             )}
             {activeTab === 'leaves' && (
-              <LeavesPanel leaves={leaves} role={role} user={user} onRefresh={loadDashboardData} />
+              <LeavesPanel
+                leaves={leaves}
+                role={role}
+                user={user}
+                onRefresh={loadDashboardData}
+                onOpenApplyLeave={(employeeId: number) => setProfileDrawer({ open: true, employeeId, tab: 'leaves' })}
+              />
             )}
             {activeTab === 'attendance' && (
               <AttendancePanel user={user} employees={employees} />
@@ -192,6 +227,14 @@ const Dashboard: React.FC = () => {
           </>
         )}
       </main>
+
+      {profileDrawer.open && profileDrawer.employeeId && (
+        <ProfileDrawer
+          employeeId={profileDrawer.employeeId}
+          initialTab={profileDrawer.tab}
+          onClose={() => setProfileDrawer({ open: false, employeeId: null, tab: 'about' })}
+        />
+      )}
     </div>
   );
 };
@@ -199,7 +242,7 @@ const Dashboard: React.FC = () => {
 // ─── Overview Panel ──────────────────────────────────────────
 
 interface OverviewProps {
-  role: string;
+  role: UserRole;
   name: string;
   employeeCount: number;
   pendingLeaves: number;
@@ -281,14 +324,15 @@ const OverviewPanel: React.FC<OverviewProps> = ({
 
 interface EmployeesPanelProps {
   employees: Employee[];
-  role: string;
+  role: UserRole;
   onRefresh: () => void;
+  onOpenProfile: (employeeId: number) => void;
 }
 
-const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefresh }) => {
-  const navigate = useNavigate();
+const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefresh, onOpenProfile }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [deptFilter, setDeptFilter] = useState('ALL');
+  const [syncingMasterData, setSyncingMasterData] = useState(false);
   
   // Add employee modal states
   const [showModal, setShowModal] = useState(false);
@@ -302,7 +346,17 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
   const [createUser, setCreateUser] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [systemRole, setSystemRole] = useState<'EMPLOYEE' | 'MANAGER' | 'HR'>('EMPLOYEE');
+  const [systemRole, setSystemRole] = useState<UserRole>('EMPLOYEE');
+  const [managerId, setManagerId] = useState('');
+  type ManagerCandidate = {
+    employeeId: number;
+    name: string;
+    position: string | null;
+    department: string | null;
+    roleHint?: 'MANAGER' | 'LEADERSHIP';
+  };
+  const [availableManagers, setAvailableManagers] = useState<ManagerCandidate[]>([]);
+  const [loadingManagers, setLoadingManagers] = useState(false);
   
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -333,7 +387,39 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
     setUsername('');
     setPassword('');
     setSystemRole('EMPLOYEE');
+    setManagerId('');
     setError('');
+  };
+
+  const loadManagerOptions = async () => {
+    setLoadingManagers(true);
+    try {
+      const res = await employeeApi.managersList();
+      const roleHintByEmployeeId = new Map<number, 'MANAGER' | 'LEADERSHIP'>(
+        (res.data?.managers ?? []).map(m => [m.employeeId, m.role])
+      );
+
+      setAvailableManagers(
+        employees.map(e => ({
+          employeeId: e.id,
+          name: e.name,
+          position: e.position,
+          department: e.department,
+          roleHint: roleHintByEmployeeId.get(e.id),
+        }))
+      );
+    } catch {
+      setAvailableManagers(
+        employees.map(e => ({
+          employeeId: e.id,
+          name: e.name,
+          position: e.position,
+          department: e.department,
+        }))
+      );
+    } finally {
+      setLoadingManagers(false);
+    }
   };
 
   const handleCreateEmployee = async (e: React.FormEvent) => {
@@ -359,6 +445,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
         phone: phone || undefined,
         employeeType: employeeType || undefined,
         biometricId: biometricId ? parseInt(biometricId, 10) : undefined,
+        managerId: managerId ? parseInt(managerId, 10) : undefined,
       };
 
       if (createUser) {
@@ -383,6 +470,21 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
     }
   };
 
+  const handleSyncMasterData = async () => {
+    setSyncingMasterData(true);
+    setError('');
+    try {
+      const res = await employeeApi.syncMasterData();
+      if (res.success) {
+        await onRefresh();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to sync master employee data');
+    } finally {
+      setSyncingMasterData(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -396,12 +498,26 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
         </div>
         
         {role === 'HR' && (
-          <button
-            onClick={() => { resetForm(); setShowModal(true); }}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm shadow-blue-500/10 self-start md:self-auto"
-          >
-            <UserPlus className="w-4 h-4" /> Add Employee
-          </button>
+          <div className="flex items-center gap-3 self-start md:self-auto">
+            <button
+              onClick={handleSyncMasterData}
+              disabled={syncingMasterData}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-200 hover:bg-slate-300 disabled:opacity-60 text-slate-800 text-sm font-semibold rounded-xl transition-all"
+            >
+              {syncingMasterData ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Sync Master Data
+            </button>
+            <button
+              onClick={() => {
+                resetForm();
+                setShowModal(true);
+                void loadManagerOptions();
+              }}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm shadow-blue-500/10"
+            >
+              <UserPlus className="w-4 h-4" /> Add Employee
+            </button>
+          </div>
         )}
       </div>
 
@@ -445,7 +561,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
           {filteredEmployees.map(emp => (
             <div
               key={emp.id}
-              onClick={() => navigate(`/profile/${emp.id}`)}
+              onClick={() => onOpenProfile(emp.id)}
               className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md hover:border-blue-200 transition-all group cursor-pointer flex items-center justify-between"
             >
               <div className="flex items-center gap-4 min-w-0 flex-1">
@@ -592,6 +708,30 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
                     className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-400"
                   />
                 </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Reporting Manager
+                  </label>
+                  <select
+                    value={managerId}
+                    onChange={e => setManagerId(e.target.value)}
+                    disabled={submitting || loadingManagers}
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all cursor-pointer bg-white disabled:bg-slate-50"
+                  >
+                    <option value="">
+                      {loadingManagers ? 'Loading managers...' : 'No manager assigned'}
+                    </option>
+                    {availableManagers.map(manager => (
+                      <option key={manager.employeeId} value={String(manager.employeeId)}>
+                        {manager.name}
+                        {manager.position ? ` - ${manager.position}` : ''}
+                        {manager.roleHint === 'LEADERSHIP' ? ' (Leadership)' : ''}
+                        {manager.roleHint === 'MANAGER' ? ' (Manager)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Checkbox: Create login account */}
@@ -657,6 +797,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
                         <option value="EMPLOYEE">Employee (Standard Access)</option>
                         <option value="MANAGER">Manager (Team Approval/Performance)</option>
                         <option value="HR">HR Admin (Full Access)</option>
+                        <option value="LEADERSHIP">Leadership (Company-wide Visibility)</option>
                       </select>
                     </div>
                   </div>
@@ -703,7 +844,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
 
 // ─── Announcements Panel ─────────────────────────────────────
 
-const AnnouncementsPanel: React.FC<{ announcements: Announcement[]; role: string }> = ({ announcements }) => (
+const AnnouncementsPanel: React.FC<{ announcements: Announcement[]; role: UserRole }> = ({ announcements }) => (
   <div>
     <h2 className="text-2xl font-bold text-slate-900 mb-6">Announcements</h2>
     {announcements.length === 0 ? (
@@ -741,8 +882,13 @@ const AnnouncementsPanel: React.FC<{ announcements: Announcement[]; role: string
 
 // ─── Leaves Panel ────────────────────────────────────────────
 
-const LeavesPanel: React.FC<{ leaves: Leave[]; role: string; user: any; onRefresh: () => void }> = ({ leaves, role, user, onRefresh }) => {
-  const navigate = useNavigate();
+const LeavesPanel: React.FC<{
+  leaves: Leave[];
+  role: UserRole;
+  user: AuthUser | null;
+  onRefresh: () => void;
+  onOpenApplyLeave: (employeeId: number) => void;
+}> = ({ leaves, role, user, onRefresh, onOpenApplyLeave }) => {
   const [activeLeave, setActiveLeave] = useState<Leave | null>(null);
   const [actionType, setActionType] = useState<'APPROVE' | 'REJECT' | null>(null);
   const [comment, setComment] = useState('');
@@ -750,8 +896,13 @@ const LeavesPanel: React.FC<{ leaves: Leave[]; role: string; user: any; onRefres
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
   const [category, setCategory] = useState<'TEAM' | 'MY'>('TEAM');
+  const [leaveActionNotice, setLeaveActionNotice] = useState('');
 
-  const isManagement = role === 'MANAGER' || role === 'HR';
+  const isManagement = MANAGEMENT_ROLES.includes(role);
+  const canApplyLeave = Boolean(user?.employeeId);
+  const ownLeaves = user?.employeeId ? leaves.filter(leave => leave.employeeId === user.employeeId) : [];
+  const hierarchyLeaves = user?.employeeId ? leaves.filter(leave => leave.employeeId !== user.employeeId) : leaves;
+  const teamLabel = ALL_ACCESS_ROLES.includes(role) ? 'All Leaves' : 'Team Leaves';
 
   const filteredLeaves = leaves.filter(l => {
     // 1. Status Filter
@@ -774,6 +925,18 @@ const LeavesPanel: React.FC<{ leaves: Leave[]; role: string; user: any; onRefres
     setActionType(type);
     setComment('');
     setError('');
+  };
+
+  const handleApplyLeave = () => {
+    if (!user) return;
+
+    if (user.employeeId) {
+      setLeaveActionNotice('');
+      onOpenApplyLeave(user.employeeId);
+      return;
+    }
+
+    setLeaveActionNotice('This account is not linked to an employee profile yet. Link the HR or leadership user to an employee record to submit leave.');
   };
 
   const handleConfirmAction = async () => {
@@ -809,22 +972,28 @@ const LeavesPanel: React.FC<{ leaves: Leave[]; role: string; user: any; onRefres
               {category === 'TEAM'
                 ? role === 'HR'
                   ? 'Review and manage all employee leave requests.'
-                  : 'Review and manage your team\'s leave requests.'
+                  : role === 'LEADERSHIP'
+                    ? 'Review and manage company-wide leave requests.'
+                  : 'Review and manage leave requests across your reporting hierarchy.'
                 : 'View your own leave application history and status.'}
             </p>
           )}
         </div>
 
         <div className="flex items-center gap-3 self-start sm:self-auto">
-          {/* Apply button for users with linked employee profile */}
-          {user?.employeeId && (
+          <div className="flex flex-col items-start gap-1.5">
             <button
-              onClick={() => navigate(`/profile/${user.employeeId}?tab=leaves`)}
+              onClick={handleApplyLeave}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm shadow-blue-500/10"
             >
-              <Calendar className="w-4 h-4" /> Apply Leave
+              <Calendar className="w-4 h-4" /> Add Leave
             </button>
-          )}
+            {!canApplyLeave && leaveActionNotice && (
+              <p className="max-w-xs text-xs text-amber-600">
+                {leaveActionNotice}
+              </p>
+            )}
+          </div>
 
           {/* Filters */}
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
@@ -856,7 +1025,8 @@ const LeavesPanel: React.FC<{ leaves: Leave[]; role: string; user: any; onRefres
                 : 'text-slate-400 hover:text-slate-600'
             }`}
           >
-            {role === 'HR' ? 'Employee Leaves' : 'Team Leaves'}
+            {teamLabel}
+            <span className="ml-2 text-xs text-slate-400">({hierarchyLeaves.length})</span>
             {category === 'TEAM' && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
             )}
@@ -870,6 +1040,7 @@ const LeavesPanel: React.FC<{ leaves: Leave[]; role: string; user: any; onRefres
             }`}
           >
             My Leaves
+            <span className="ml-2 text-xs text-slate-400">({ownLeaves.length})</span>
             {category === 'MY' && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
             )}
@@ -935,7 +1106,7 @@ const LeavesPanel: React.FC<{ leaves: Leave[]; role: string; user: any; onRefres
                   </span>
                   
                   {leave.status === 'PENDING' && 
-                   (role === 'HR' || role === 'MANAGER') && 
+                   MANAGEMENT_ROLES.includes(role) && 
                    leave.employeeId !== user?.employeeId && (
                     <div className="flex gap-2">
                       <button

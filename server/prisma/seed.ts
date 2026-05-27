@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { masterEmployees } from '../src/data/employeeMaster.js';
 
 const prisma = new PrismaClient();
 
@@ -9,56 +10,51 @@ const prisma = new PrismaClient();
  * Run with: npm run db:seed
  */
 async function main() {
-    console.log('🌱 Seeding database...\n');
+    console.log('Seeding database...\n');
 
-    // ─── 1. Create HR admin user ───────────────────────────────
+    // 1. Create or update an employee profile for the local HR admin.
+    const adminEmployee = await prisma.employee.upsert({
+        where: { email: 'admin@autohr.local' },
+        update: {
+            name: 'Admin HR',
+            department: 'HR',
+            position: 'HR Admin',
+            employeeType: 'Full-time',
+            isActive: true,
+        },
+        create: {
+            name: 'Admin HR',
+            email: 'admin@autohr.local',
+            department: 'HR',
+            position: 'HR Admin',
+            employeeType: 'Full-time',
+        },
+    });
+    console.log(`Created HR admin employee: ${adminEmployee.name}`);
+
+    // 2. Create or update the HR admin user and link it to that employee.
     const hrPassword = await bcrypt.hash('admin123', 12);
     const hrUser = await prisma.user.upsert({
         where: { username: 'admin' },
-        update: {},
+        update: {
+            role: 'HR',
+            employeeId: adminEmployee.id,
+            isActive: true,
+        },
         create: {
             username: 'admin',
             passwordHash: hrPassword,
             role: 'HR',
+            employeeId: adminEmployee.id,
         },
     });
-    console.log(`✅ HR admin: ${hrUser.username} (role: ${hrUser.role})`);
+    console.log(`Created HR admin: ${hrUser.username} (role: ${hrUser.role})`);
 
-    // ─── 2. Seed employees from biometric master data ──────────
-    // BiometricId maps to the attendance portal's EnNo
-    const employeesData = [
-        { biometricId: 2, name: 'Rishi', department: 'Operations' },
-        { biometricId: 3, name: 'Ankur Jain', department: 'Operations' },
-        { biometricId: 4, name: 'Santosh Sharma', department: 'Operations' },
-        { biometricId: 5, name: 'Gaurav', department: 'Operations' },
-        { biometricId: 7, name: 'Gunjan', department: 'Operations' },
-        { biometricId: 9, name: 'Aarti', department: 'Operations' },
-        { biometricId: 10, name: 'Akansha Bajpai', department: 'Operations' },
-        { biometricId: 11, name: 'Chirag Chaddha', department: 'Operations' },
-        { biometricId: 14, name: 'Sumit', department: 'Operations' },
-        { biometricId: 15, name: 'Sanjay Dwivedi', department: 'Operations' },
-        { biometricId: 17, name: 'Himanshu Gandhi', department: 'Operations' },
-        { biometricId: 19, name: 'Sandhya Jha', department: 'Operations' },
-        { biometricId: 20, name: 'Vijaya', department: 'Operations' },
-        { biometricId: 26, name: 'Saurabh', department: 'Operations' },
-        { biometricId: 31, name: 'Anshika Singh', department: 'Operations' },
-        { biometricId: 32, name: 'Prabhat', department: 'Engineering' },
-        { biometricId: 34, name: 'Pankaj Vij', department: 'Operations' },
-        { biometricId: 35, name: 'Kiran', department: 'Operations' },
-        { biometricId: 36, name: 'Hardevi', department: 'Operations' },
-        { biometricId: 37, name: 'Sadhana', department: 'Operations' },
-        { biometricId: 38, name: 'Kanchani', department: 'Operations' },
-        { biometricId: 40, name: 'Naman', department: 'Operations' },
-        { biometricId: 41, name: 'Ashish Rai', department: 'Operations' },
-        { biometricId: 42, name: 'Bharat Maheshwari', department: 'Engineering' },
-        { biometricId: 43, name: 'Trisha Kushwaha', department: 'Operations' },
-        { biometricId: 45, name: 'Kashif', department: 'Operations' },
-    ];
-
+    // 3. Seed employees from biometric master data.
     let created = 0;
     let skipped = 0;
 
-    for (const emp of employeesData) {
+    for (const emp of masterEmployees) {
         const existing = await prisma.employee.findUnique({
             where: { biometricId: emp.biometricId },
         });
@@ -78,9 +74,9 @@ async function main() {
         created++;
     }
 
-    console.log(`✅ Employees: ${created} created, ${skipped} skipped (already exist)`);
+    console.log(`Employees: ${created} created, ${skipped} skipped (already exist)`);
 
-    // ─── 3. Create a test employee login ───────────────────────
+    // 4. Create a test employee login.
     const prabhat = await prisma.employee.findUnique({
         where: { biometricId: 32 },
     });
@@ -89,7 +85,10 @@ async function main() {
         const empPassword = await bcrypt.hash('emp123', 12);
         await prisma.user.upsert({
             where: { username: 'prabhat' },
-            update: {},
+            update: {
+                employeeId: prabhat.id,
+                isActive: true,
+            },
             create: {
                 username: 'prabhat',
                 passwordHash: empPassword,
@@ -97,17 +96,17 @@ async function main() {
                 employeeId: prabhat.id,
             },
         });
-        console.log(`✅ Test employee login: prabhat / emp123`);
+        console.log('Test employee login: prabhat / emp123');
     }
 
-    console.log('\n🌱 Seeding complete!');
+    console.log('\nSeeding complete!');
     console.log('   Login as HR:       admin / admin123');
     console.log('   Login as Employee: prabhat / emp123');
 }
 
 main()
     .catch((e) => {
-        console.error('❌ Seed failed:', e);
+        console.error('Seed failed:', e);
         process.exit(1);
     })
     .finally(async () => {

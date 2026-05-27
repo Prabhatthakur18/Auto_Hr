@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, type JwtPayload } from '../utils/jwt.js';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
+import prisma from '../config/db.js';
 import type { Role } from '@prisma/client';
 
 /**
@@ -70,11 +71,85 @@ export function authorize(...allowedRoles: Role[]) {
     };
 }
 
+export const FULL_ACCESS_ROLES: Role[] = ['HR', 'LEADERSHIP'];
+export const LEAVE_REVIEWER_ROLES: Role[] = ['HR', 'MANAGER', 'LEADERSHIP'];
+export const MANAGER_ASSIGNMENT_ROLES: Role[] = ['MANAGER', 'LEADERSHIP'];
+
+export function hasFullAccess(role: Role): boolean {
+    return FULL_ACCESS_ROLES.includes(role);
+}
+
+export function canReviewLeaves(role: Role): boolean {
+    return LEAVE_REVIEWER_ROLES.includes(role);
+}
+
+export async function getDescendantEmployeeIds(
+    managerEmployeeId: number
+): Promise<number[]> {
+    const visited = new Set<number>();
+    const descendants: number[] = [];
+    let frontier = [managerEmployeeId];
+
+    while (frontier.length > 0) {
+        const reports = await prisma.employee.findMany({
+            where: {
+                managerId: { in: frontier },
+                isActive: true,
+            },
+            select: { id: true },
+        });
+
+        const nextFrontier: number[] = [];
+
+        for (const report of reports) {
+            if (visited.has(report.id)) {
+                continue;
+            }
+
+            visited.add(report.id);
+            descendants.push(report.id);
+            nextFrontier.push(report.id);
+        }
+
+        frontier = nextFrontier;
+    }
+
+    return descendants;
+}
+
+export async function getScopedEmployeeIds(
+    req: Request
+): Promise<number[] | null> {
+    if (!req.dataScope) {
+        throw new UnauthorizedError('Authentication required');
+    }
+
+    const scope = req.dataScope;
+
+    switch (scope.type) {
+        case 'all':
+            return null;
+        case 'self':
+            return scope.employeeId ? [scope.employeeId] : [];
+        case 'team':
+            if (!scope.employeeId) {
+                return [];
+            }
+
+            return [
+                scope.employeeId,
+                ...(await getDescendantEmployeeIds(scope.employeeId)),
+            ];
+        default:
+            return [];
+    }
+}
+
 /**
  * Data isolation middleware.
  * Ensures employees can only access their own data.
  * Managers can access their own + direct reports.
- * HR can access everything.
+ * HR and leadership can access everything.
  *
  * Attaches `dataScope` to req for use in route handlers.
  */
@@ -102,6 +177,7 @@ export function scopeData(
     }
 
     switch (req.user.role) {
+        case 'LEADERSHIP':
         case 'HR':
             req.dataScope = { type: 'all', employeeId: req.user.employeeId };
             break;
@@ -115,4 +191,64 @@ export function scopeData(
     }
 
     next();
+}
+
+export async function canAccessEmployee(
+    req: Request,
+    targetEmployeeId: number
+): Promise<boolean> {
+    if (!req.dataScope) {
+        throw new UnauthorizedError('Authentication required');
+    }
+
+    const scope = req.dataScope;
+
+    switch (scope.type) {
+        case 'all':
+            return true;
+        case 'self':
+            return scope.employeeId === targetEmployeeId;
+        case 'team':
+            return Boolean(
+                (await getScopedEmployeeIds(req))?.includes(targetEmployeeId)
+            );
+        default:
+            return false;
+    }
+}
+
+export async function assertCanAccessEmployee(
+    req: Request,
+    targetEmployeeId: number,
+    messages?: {
+        self?: string;
+        team?: string;
+        default?: string;
+    }
+): Promise<void> {
+    const allowed = await canAccessEmployee(req, targetEmployeeId);
+    if (allowed) {
+        return;
+    }
+
+    const scope = req.dataScope;
+    if (!scope) {
+        throw new UnauthorizedError('Authentication required');
+    }
+
+    if (scope.type === 'self') {
+        throw new ForbiddenError(
+            messages?.self ?? 'You can only view your own data'
+        );
+    }
+
+    if (scope.type === 'team') {
+        throw new ForbiddenError(
+            messages?.team ?? 'You can only view your own team members'
+        );
+    }
+
+    throw new ForbiddenError(
+        messages?.default ?? 'You do not have permission to access this data'
+    );
 }

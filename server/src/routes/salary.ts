@@ -1,10 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../config/db.js';
-import { authenticate, authorize, scopeData } from '../middleware/auth.js';
+import {
+    authenticate,
+    authorize,
+    scopeData,
+    assertCanAccessEmployee,
+} from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { ForbiddenError, BadRequestError } from '../utils/errors.js';
+import { BadRequestError } from '../utils/errors.js';
 
 const router = Router();
 
@@ -42,17 +47,10 @@ router.get(
         const employeeId = parseInt(req.params['employeeId'] as string, 10);
         if (isNaN(employeeId)) throw new BadRequestError('Invalid employee ID');
 
-        // Data isolation
-        const scope = req.dataScope!;
-        if (scope.type === 'self' && scope.employeeId !== employeeId) {
-            throw new ForbiddenError('You can only view your own salary');
-        }
-        if (scope.type === 'team' && scope.employeeId !== employeeId) {
-            const isReport = await prisma.employee.findFirst({
-                where: { id: employeeId, managerId: scope.employeeId! },
-            });
-            if (!isReport) throw new ForbiddenError('You can only view your team\'s salary');
-        }
+        await assertCanAccessEmployee(req, employeeId, {
+            self: 'You can only view your own salary',
+            team: 'You can only view your team\'s salary',
+        });
 
         const breakdowns = await prisma.salaryBreakdown.findMany({
             where: { employeeId },
@@ -109,17 +107,10 @@ router.get(
         const employeeId = parseInt(req.params['employeeId'] as string, 10);
         if (isNaN(employeeId)) throw new BadRequestError('Invalid employee ID');
 
-        // Data isolation
-        const scope = req.dataScope!;
-        if (scope.type === 'self' && scope.employeeId !== employeeId) {
-            throw new ForbiddenError('You can only view your own salary slips');
-        }
-        if (scope.type === 'team' && scope.employeeId !== employeeId) {
-            const isReport = await prisma.employee.findFirst({
-                where: { id: employeeId, managerId: scope.employeeId! },
-            });
-            if (!isReport) throw new ForbiddenError('You can only view your team\'s salary slips');
-        }
+        await assertCanAccessEmployee(req, employeeId, {
+            self: 'You can only view your own salary slips',
+            team: 'You can only view your team\'s salary slips',
+        });
 
         const slips = await prisma.salarySlip.findMany({
             where: { employeeId },

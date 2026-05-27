@@ -5,12 +5,29 @@ import {
   Loader2, AlertCircle, Briefcase, GraduationCap, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { employeeApi, leaveApi, type EmployeeDetail, type Leave } from '../services/api';
+import {
+  employeeApi,
+  leaveApi,
+  type EmployeeDetail,
+  type EmployeeMutationPayload,
+  type Leave,
+  type UserRole,
+} from '../services/api';
 import { performanceApi } from '../services/api';
 import { type Kra, type PerformanceSummary } from '../types';
 import PerformanceTab from '../components/tabs/PerformanceTab';
 import LeavesTab from '../components/tabs/LeavesTab';
 import { AttendanceTab } from '../components/tabs/AttendanceTab';
+
+const getRoleBadgeClasses = (role: UserRole) => (
+  role === 'HR'
+    ? 'bg-rose-500/15 text-rose-700 border border-rose-500/20'
+    : role === 'LEADERSHIP'
+      ? 'bg-amber-500/15 text-amber-800 border border-amber-500/20'
+      : role === 'MANAGER'
+        ? 'bg-teal-500/15 text-teal-800 border border-teal-500/20'
+        : 'bg-slate-500/10 text-slate-700 border border-slate-500/15'
+);
 
 // ─── Score Display ───────────────────────────────────────────
 
@@ -43,18 +60,16 @@ const ScoreDisplay: React.FC<{ score: number | null }> = ({ score }) => {
 
 type Tab = 'about' | 'performance' | 'leaves' | 'attendance';
 
-const Profile: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+export const ProfileView: React.FC<{
+  employeeId: number;
+  initialTab?: Tab;
+  onBack?: () => void;
+  onOpenEmployee?: (employeeId: number) => void;
+  theme?: 'dark' | 'light';
+}> = ({ employeeId, initialTab = 'about', onBack, onOpenEmployee, theme = 'dark' }) => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { user } = useAuth();
-
-  // Read ?tab= query param to auto-activate the correct tab
-  const initialTab = (() => {
-    const param = new URLSearchParams(location.search).get('tab');
-    if (param === 'leaves' || param === 'performance' || param === 'attendance') return param as Tab;
-    return 'about' as Tab;
-  })();
+  const isLight = theme === 'light';
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [employee, setEmployee] = useState<EmployeeDetail | null>(null);
   const [leaves, setLeaves] = useState<Leave[]>([]);
@@ -63,13 +78,16 @@ const Profile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const employeeId = parseInt(id || '', 10);
   const isHR = user?.role === 'HR';
 
   useEffect(() => {
     if (!employeeId) return;
     loadProfile();
   }, [employeeId]);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   const loadProfile = async () => {
     setLoading(true);
@@ -110,21 +128,26 @@ const Profile: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+      <div className="min-h-[60vh] bg-transparent flex items-center justify-center">
+        <Loader2 className={`w-10 h-10 animate-spin ${isLight ? 'text-rose-500' : 'text-blue-500'}`} />
       </div>
     );
   }
 
   if (error || !employee) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-[60vh] bg-transparent flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
           <p className="text-slate-700 font-medium">{error || 'Employee not found'}</p>
-          <button onClick={() => navigate('/')} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-xl text-sm hover:bg-blue-600 transition-colors">
-            Back to Dashboard
-          </button>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className={`mt-4 px-4 py-2 text-white rounded-xl text-sm transition-colors ${isLight ? 'bg-rose-500 hover:bg-rose-600' : 'bg-blue-500 hover:bg-blue-600'}`}
+            >
+              Back
+            </button>
+          )}
         </div>
       </div>
     );
@@ -139,89 +162,122 @@ const Profile: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-900">
+    <div className={isLight
+      ? 'bg-white/70 backdrop-blur rounded-3xl overflow-hidden border border-rose-100 shadow-xl shadow-rose-200/40'
+      : 'bg-slate-900 rounded-3xl overflow-hidden border border-slate-800/60 shadow-xl shadow-slate-950/20'
+    }>
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border-b border-slate-700/50">
-        <div className="max-w-5xl mx-auto px-6 pt-6 pb-0">
+      <div className={isLight
+        ? 'bg-gradient-to-r from-rose-50 via-amber-50 to-orange-50 border-b border-rose-100'
+        : 'bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border-b border-slate-700/50'
+      }>
+        <div className="mx-auto px-6 pt-6 pb-0">
           {/* Back */}
           <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-6 transition-colors"
+            onClick={() => (onBack ? onBack() : navigate('/'))}
+            className={`flex items-center gap-2 text-sm mb-6 transition-colors ${isLight ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`}
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+            <ArrowLeft className="w-4 h-4" /> Back
           </button>
 
           {/* Profile header */}
           <div className="flex items-start gap-6 pb-6">
             {/* Avatar */}
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow-xl shadow-blue-900/40 flex-shrink-0">
+            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-xl flex-shrink-0 ${
+              isLight ? 'bg-gradient-to-br from-rose-400 to-orange-400 shadow-rose-200/60' : 'bg-gradient-to-br from-blue-400 to-indigo-600 shadow-blue-900/40'
+            }`}>
               {initials}
             </div>
 
             {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-2xl font-bold text-white">{employee.name}</h1>
+                <h1 className={`text-2xl font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{employee.name}</h1>
                 {employee.user && (
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${employee.user.role === 'HR' ? 'bg-blue-500/20 text-blue-300' :
-                      employee.user.role === 'MANAGER' ? 'bg-emerald-500/20 text-emerald-300' :
-                        'bg-purple-500/20 text-purple-300'
-                    }`}>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getRoleBadgeClasses(employee.user.role)}`}>
                     {employee.user.role}
                   </span>
                 )}
               </div>
-              <p className="text-slate-300 mt-0.5">{employee.position || 'No position set'}</p>
+              <p className={`${isLight ? 'text-slate-600' : 'text-slate-300'} mt-0.5`}>{employee.position || 'No position set'}</p>
               <div className="flex items-center gap-4 mt-2 flex-wrap">
                 {employee.department && (
-                  <span className="flex items-center gap-1.5 text-sm text-slate-400">
+                  <span className={`flex items-center gap-1.5 text-sm ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     <Building2 className="w-3.5 h-3.5" /> {employee.department}
                   </span>
                 )}
                 {employee.email && (
-                  <span className="flex items-center gap-1.5 text-sm text-slate-400">
+                  <span className={`flex items-center gap-1.5 text-sm ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     <Mail className="w-3.5 h-3.5" /> {employee.email}
                   </span>
                 )}
                 {employee.phone && (
-                  <span className="flex items-center gap-1.5 text-sm text-slate-400">
+                  <span className={`flex items-center gap-1.5 text-sm ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     <Phone className="w-3.5 h-3.5" /> {employee.phone}
                   </span>
                 )}
                 {employee.joinDate && (
-                  <span className="flex items-center gap-1.5 text-sm text-slate-400">
+                  <span className={`flex items-center gap-1.5 text-sm ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                     <Calendar className="w-3.5 h-3.5" /> Joined {new Date(employee.joinDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
                   </span>
                 )}
               </div>
 
               {/* Manager + Direct Reports */}
-              <div className="flex items-center gap-4 mt-3 flex-wrap">
-                {employee.manager && (
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <span className="text-slate-500">Reports to:</span>
-                    <button
-                      onClick={() => navigate(`/profile/${employee.manager!.id}`)}
-                      className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
-                    >
-                      {employee.manager.name}
-                    </button>
+              <div className="flex items-start gap-4 mt-3 flex-wrap">
+                {(employee.managers && employee.managers.length > 0) || employee.manager ? (
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm text-slate-500">Reports to:</span>
+                    <div className="flex gap-2 flex-wrap">
+                      {employee.managers && employee.managers.length > 0 ? (
+                        employee.managers.map(m => (
+                          <button
+                            key={m.manager.id}
+                            onClick={() => (onOpenEmployee ? onOpenEmployee(m.manager.id) : navigate(`/profile/${m.manager.id}`))}
+                            className={`text-xs px-3 py-1 rounded-full transition-colors border font-medium ${
+                              isLight
+                                ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border-rose-200'
+                                : 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 hover:text-blue-300 border-blue-500/20'
+                            }`}
+                          >
+                            {m.manager.name}
+                          </button>
+                        ))
+                      ) : employee.manager ? (
+                        <button
+                          onClick={() => (onOpenEmployee ? onOpenEmployee(employee.manager!.id) : navigate(`/profile/${employee.manager!.id}`))}
+                          className={`text-xs px-3 py-1 rounded-full transition-colors border font-medium ${
+                            isLight
+                              ? 'bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border-rose-200'
+                              : 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 hover:text-blue-300 border-blue-500/20'
+                          }`}
+                        >
+                          {employee.manager.name}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
-                )}
+                ) : null}
                 {employee.directReports && employee.directReports.length > 0 && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-slate-500 text-sm flex items-center gap-1">
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm text-slate-500 flex items-center gap-1">
                       <Users className="w-3.5 h-3.5" /> Team:
                     </span>
-                    {employee.directReports.map(dr => (
-                      <button
-                        key={dr.id}
-                        onClick={() => navigate(`/profile/${dr.id}`)}
-                        className="text-xs bg-slate-700/60 hover:bg-slate-600/60 text-slate-300 hover:text-white px-2.5 py-1 rounded-full transition-colors border border-slate-600/40"
-                      >
-                        {dr.name}
-                      </button>
-                    ))}
+                    <div className="flex gap-2 flex-wrap">
+                      {employee.directReports.map(dr => (
+                        <button
+                          key={dr.id}
+                          onClick={() => (onOpenEmployee ? onOpenEmployee(dr.id) : navigate(`/profile/${dr.id}`))}
+                          className={`text-xs px-2.5 py-1 rounded-full transition-colors border ${
+                            isLight
+                              ? 'bg-white/70 hover:bg-white text-slate-700 hover:text-slate-900 border-rose-100'
+                              : 'bg-slate-700/60 hover:bg-slate-600/60 text-slate-300 hover:text-white border-slate-600/40'
+                          }`}
+                        >
+                          {dr.name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -230,7 +286,7 @@ const Profile: React.FC = () => {
             {/* Score Ring */}
             <div className="flex-shrink-0 flex flex-col items-center gap-2">
               <ScoreDisplay score={summary?.overallScore ?? null} />
-              <span className="text-xs text-slate-400">Performance</span>
+              <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Performance</span>
             </div>
           </div>
 
@@ -241,16 +297,16 @@ const Profile: React.FC = () => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-5 py-3 text-sm font-medium transition-all border-b-2 ${activeTab === tab.id
-                    ? 'text-white border-blue-500'
-                    : 'text-slate-400 border-transparent hover:text-slate-200'
+                    ? (isLight ? 'text-slate-900 border-rose-500' : 'text-white border-blue-500')
+                    : (isLight ? 'text-slate-500 border-transparent hover:text-slate-800' : 'text-slate-400 border-transparent hover:text-slate-200')
                   }`}
               >
                 {tab.label}
                 {tab.id === 'leaves' && leaves.length > 0 && (
-                  <span className="ml-2 text-xs bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded-full">{leaves.length}</span>
+                  <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${isLight ? 'bg-rose-100 text-rose-700' : 'bg-slate-700 text-slate-300'}`}>{leaves.length}</span>
                 )}
                 {tab.id === 'performance' && summary && summary.totalKras > 0 && (
-                  <span className="ml-2 text-xs bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded-full">{summary.totalKras}</span>
+                  <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${isLight ? 'bg-amber-100 text-amber-800' : 'bg-slate-700 text-slate-300'}`}>{summary.totalKras}</span>
                 )}
               </button>
             ))}
@@ -259,8 +315,8 @@ const Profile: React.FC = () => {
       </div>
 
       {/* Tab Content */}
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        {activeTab === 'about' && <AboutSection employee={employee} isHR={isHR} onRefresh={loadProfile} />}
+      <div className="mx-auto px-6 py-8">
+        {activeTab === 'about' && <AboutSection employee={employee} isHR={isHR} onRefresh={loadProfile} theme={theme} />}
         {activeTab === 'performance' && (
           <PerformanceTab
             employeeId={employeeId}
@@ -268,10 +324,11 @@ const Profile: React.FC = () => {
             summary={summary}
             isHR={isHR}
             onRefresh={refreshPerformance}
+            theme={theme}
           />
         )}
-        {activeTab === 'leaves' && <LeavesTab leaves={leaves} employee={employee} isHR={isHR} onRefresh={loadProfile} />}
-        {activeTab === 'attendance' && <AttendanceTab employeeId={employeeId} isHR={isHR} />}
+        {activeTab === 'leaves' && <LeavesTab leaves={leaves} employee={employee} isHR={isHR} onRefresh={loadProfile} theme={theme} />}
+        {activeTab === 'attendance' && <AttendanceTab employeeId={employeeId} isHR={isHR} theme={theme} />}
       </div>
     </div>
   );
@@ -279,13 +336,24 @@ const Profile: React.FC = () => {
 
 // ─── About Section (inline, no separate file needed) ─────────
 
-const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefresh: () => void }> = ({ employee, isHR, onRefresh }) => {
+const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefresh: () => void; theme: 'dark' | 'light' }> = ({ employee, isHR, onRefresh, theme }) => {
   const navigate = useNavigate();
+  const isLight = theme === 'light';
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
-  const [allEmployees, setAllEmployees] = useState<{ id: number; name: string }[]>([]);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  type ManagerCandidate = {
+    employeeId: number;
+    name: string;
+    position: string | null;
+    department: string | null;
+    roleHint?: 'MANAGER' | 'LEADERSHIP';
+  };
+  const [managerOptions, setManagerOptions] = useState<ManagerCandidate[]>([]);
   const [form, setForm] = useState({
+    name: employee.name || '',
+    biometricId: employee.biometricId ? String(employee.biometricId) : '',
     bio: employee.bio || '',
     skills: (() => {
       if (Array.isArray(employee.skills)) return (employee.skills as string[]).join(', ');
@@ -301,33 +369,52 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
     phone: employee.phone || '',
     email: employee.email || '',
     employeeType: employee.employeeType || '',
+    joinDate: employee.joinDate ? employee.joinDate.split('T')[0] : '',
     managerId: employee.managerId ?? null as number | null,
+    managerIds: employee.managers?.map(m => m.manager.id) ?? (employee.managerId ? [employee.managerId] : []) as number[],
   });
 
   const startEditing = async () => {
     setEditing(true);
-    // Load employee list for manager dropdown
+    setSaveError(null);
+    // Load all employees so HR can assign reporting lines even before managers have logins.
     try {
-      const res = await employeeApi.list({ limit: '200' });
-      if (res.data) {
-        setAllEmployees(
-          res.data.employees
-            .filter(e => e.id !== employee.id) // can't be own manager
-            .map(e => ({ id: e.id, name: e.name }))
-        );
-      }
-    } catch { /* ignore */ }
+      const [empsRes, mgrRes] = await Promise.all([
+        employeeApi.list({ page: '1', limit: '200' }),
+        employeeApi.managersList(),
+      ]);
+
+      const roleHintByEmployeeId = new Map<number, 'MANAGER' | 'LEADERSHIP'>(
+        (mgrRes.data?.managers ?? []).map(m => [m.employeeId, m.role])
+      );
+
+      const opts = (empsRes.data?.employees ?? [])
+        .filter(e => e.id !== employee.id)
+        .map(e => ({
+          employeeId: e.id,
+          name: e.name,
+          position: e.position,
+          department: e.department,
+          roleHint: roleHintByEmployeeId.get(e.id),
+        }));
+
+      setManagerOptions(opts);
+    } catch {
+      setManagerOptions([]);
+    }
   };
 
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       const skillsArr = form.skills.split(',').map(s => s.trim()).filter(Boolean);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await employeeApi.update(employee.id, {
+      const payload: EmployeeMutationPayload = {
+        name: form.name,
+        biometricId: form.biometricId ? parseInt(form.biometricId, 10) : null,
         bio: form.bio,
-        skills: skillsArr as any,
+        skills: skillsArr,
         education: form.education,
         experience: form.experience,
         position: form.position,
@@ -335,12 +422,15 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
         phone: form.phone,
         email: form.email,
         employeeType: form.employeeType,
-        managerId: form.managerId,
-      } as any);
+        joinDate: form.joinDate || null,
+        managerIds: form.managerIds && form.managerIds.length > 0 ? form.managerIds : [],
+      };
+      await employeeApi.update(employee.id, payload);
       await onRefresh();
       setEditing(false);
     } catch (e) {
-      console.error(e);
+      const message = e instanceof Error ? e.message : 'Failed to update employee profile';
+      setSaveError(message);
     } finally {
       setSaving(false);
     }
@@ -390,71 +480,126 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
       )}
 
       {editing ? (
-        <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700 space-y-4">
-          <h3 className="text-white font-semibold text-lg mb-2">Edit Profile</h3>
+        <div className={isLight ? 'bg-white/85 rounded-2xl p-6 border border-[rgba(var(--hr-border),0.85)] space-y-4 text-stone-900 shadow-sm' : 'bg-slate-800 rounded-2xl p-6 border border-slate-700/50 space-y-4'}>
+          <h3 className={isLight ? 'text-stone-900 font-semibold text-lg mb-2' : 'text-white font-semibold text-lg mb-2'}>Edit Profile</h3>
+          {saveError && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {saveError}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             {[
+              { label: 'Full Name', key: 'name' },
+              { label: 'Biometric ID / EnNo', key: 'biometricId' },
               { label: 'Position', key: 'position' },
               { label: 'Department', key: 'department' },
               { label: 'Phone', key: 'phone' },
               { label: 'Email', key: 'email' },
               { label: 'Employee Type', key: 'employeeType' },
+              { label: 'Join Date', key: 'joinDate', type: 'date' },
             ].map(f => (
               <div key={f.key}>
-                <label className="block text-xs text-slate-400 mb-1">{f.label}</label>
+                <label className={isLight ? 'block text-xs text-stone-600 mb-1' : 'block text-xs text-slate-400 mb-1'}>{f.label}</label>
                 <input
+                  type={f.type || 'text'}
                   value={form[f.key as keyof typeof form] ?? ''}
                   onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                  className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500"
+                  className={isLight ? 'w-full bg-white text-stone-900 text-sm rounded-lg px-3 py-2 border border-[rgba(var(--hr-border),0.85)] focus:outline-none focus:border-rose-300' : 'w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500'}
                 />
               </div>
             ))}
             <div className="col-span-2">
-              <label className="block text-xs text-slate-400 mb-1">Skills (comma separated)</label>
+              <label className={isLight ? 'block text-xs text-stone-600 mb-1' : 'block text-xs text-slate-400 mb-1'}>Skills (comma separated)</label>
               <input
                 value={form.skills}
                 onChange={e => setForm(p => ({ ...p, skills: e.target.value }))}
-                className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500"
+                className={isLight ? 'w-full bg-white text-stone-900 text-sm rounded-lg px-3 py-2 border border-[rgba(var(--hr-border),0.85)] focus:outline-none focus:border-rose-300' : 'w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500'}
               />
             </div>
             <div className="col-span-2">
-              <label className="block text-xs text-slate-400 mb-1">Bio</label>
+              <label className={isLight ? 'block text-xs text-stone-600 mb-1' : 'block text-xs text-slate-400 mb-1'}>Bio</label>
               <textarea
                 rows={3}
                 value={form.bio}
                 onChange={e => setForm(p => ({ ...p, bio: e.target.value }))}
-                className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500 resize-none"
+                className={isLight ? 'w-full bg-white text-stone-900 text-sm rounded-lg px-3 py-2 border border-[rgba(var(--hr-border),0.85)] focus:outline-none focus:border-rose-300 resize-none' : 'w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500 resize-none'}
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Education</label>
+              <label className={isLight ? 'block text-xs text-stone-600 mb-1' : 'block text-xs text-slate-400 mb-1'}>Education</label>
               <input
                 value={form.education}
                 onChange={e => setForm(p => ({ ...p, education: e.target.value }))}
-                className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500"
+                className={isLight ? 'w-full bg-white text-stone-900 text-sm rounded-lg px-3 py-2 border border-[rgba(var(--hr-border),0.85)] focus:outline-none focus:border-rose-300' : 'w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500'}
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Experience</label>
+              <label className={isLight ? 'block text-xs text-stone-600 mb-1' : 'block text-xs text-slate-400 mb-1'}>Experience</label>
               <input
                 value={form.experience}
                 onChange={e => setForm(p => ({ ...p, experience: e.target.value }))}
-                className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500"
+                className={isLight ? 'w-full bg-white text-stone-900 text-sm rounded-lg px-3 py-2 border border-[rgba(var(--hr-border),0.85)] focus:outline-none focus:border-rose-300' : 'w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500'}
               />
             </div>
             {/* Manager Assignment */}
             <div className="col-span-2">
-              <label className="block text-xs text-slate-400 mb-1">Manager (Reports To)</label>
-              <select
-                value={form.managerId ?? ''}
-                onChange={e => setForm(p => ({ ...p, managerId: e.target.value ? parseInt(e.target.value) : null }))}
-                className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500"
-              >
-                <option value="">— No Manager (Top Level) —</option>
-                {allEmployees.map(e => (
-                  <option key={e.id} value={e.id}>{e.name}</option>
-                ))}
-              </select>
+              <label className={isLight ? 'block text-xs text-stone-600 mb-2 font-medium' : 'block text-xs text-slate-400 mb-2 font-medium'}>Managers (Reports To) - Select one or more</label>
+              <div className={isLight ? 'bg-white border border-[rgba(var(--hr-border),0.85)] rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto' : 'bg-slate-700 border border-slate-600 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto'}>
+                {managerOptions.length === 0 ? (
+                  <p className={isLight ? 'text-stone-500 text-xs italic' : 'text-slate-500 text-xs italic'}>No managers available</p>
+                ) : (
+                  managerOptions.map(option => (
+                    <label key={option.employeeId} className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                      <input
+                        type="checkbox"
+                        checked={form.managerIds.includes(option.employeeId)}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setForm(p => ({
+                              ...p,
+                              managerIds: [...p.managerIds, option.employeeId]
+                            }));
+                          } else {
+                            setForm(p => ({
+                              ...p,
+                              managerIds: p.managerIds.filter(id => id !== option.employeeId)
+                            }));
+                          }
+                        }}
+                        className="w-4 h-4 accent-rose-500 cursor-pointer"
+                      />
+                      <span className={isLight ? 'text-sm text-stone-700' : 'text-sm text-slate-200'}>
+                        {option.name}
+                        {option.position ? ` - ${option.position}` : ''}
+                        {option.roleHint === 'LEADERSHIP' ? ' (Leadership)' : ''}
+                        {option.roleHint === 'MANAGER' ? ' (Manager)' : ''}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {form.managerIds.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {form.managerIds.map(managerId => {
+                    const mgr = managerOptions.find(m => m.employeeId === managerId);
+                    return mgr ? (
+                      <span key={managerId} className={isLight ? 'text-xs px-2 py-1 bg-rose-100 text-rose-700 border border-rose-200 rounded-full flex items-center gap-1' : 'text-xs px-2 py-1 bg-blue-500/15 text-blue-300 border border-blue-500/20 rounded-full flex items-center gap-1'}>
+                        {mgr.name}
+                        <button
+                          type="button"
+                          onClick={() => setForm(p => ({
+                            ...p,
+                            managerIds: p.managerIds.filter(id => id !== managerId)
+                          }))}
+                          className="ml-1 hover:opacity-70"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex gap-3 pt-2">
@@ -467,7 +612,7 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
             </button>
             <button
               onClick={() => setEditing(false)}
-              className="px-5 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-xl transition-colors"
+              className={isLight ? 'px-5 py-2 bg-white border border-[rgba(var(--hr-border),0.85)] text-stone-700 text-sm rounded-xl hover:bg-rose-50 transition-colors' : 'px-5 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-xl transition-colors'}
             >
               Cancel
             </button>
@@ -476,52 +621,52 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Bio */}
-          <div className="md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700/50">
-            <h3 className="text-slate-300 font-semibold mb-3 flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-blue-400" /> Bio
+          <div className={isLight ? 'md:col-span-2 bg-white/80 rounded-2xl p-6 border border-[rgba(var(--hr-border),0.85)] shadow-sm' : 'md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700/50'}>
+            <h3 className={isLight ? 'text-stone-900 font-semibold mb-3 flex items-center gap-2' : 'text-slate-300 font-semibold mb-3 flex items-center gap-2'}>
+              <Briefcase className={`w-4 h-4 ${isLight ? 'text-rose-500' : 'text-blue-400'}`} /> Bio
             </h3>
-            <p className="text-slate-400 text-sm leading-relaxed">
-              {employee.bio || <span className="italic text-slate-500">No bio added yet</span>}
+            <p className={isLight ? 'text-stone-600 text-sm leading-relaxed' : 'text-slate-400 text-sm leading-relaxed'}>
+              {employee.bio || <span className={isLight ? 'italic text-stone-500' : 'italic text-slate-500'}>No bio added yet</span>}
             </p>
           </div>
 
           {/* Skills */}
-          <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700/50">
-            <h3 className="text-slate-300 font-semibold mb-3 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-400" /> Skills
+          <div className={isLight ? 'bg-white/80 rounded-2xl p-6 border border-[rgba(var(--hr-border),0.85)] shadow-sm' : 'bg-slate-800 rounded-2xl p-6 border border-slate-700/50'}>
+            <h3 className={isLight ? 'text-stone-900 font-semibold mb-3 flex items-center gap-2' : 'text-slate-300 font-semibold mb-3 flex items-center gap-2'}>
+              <Sparkles className={`w-4 h-4 ${isLight ? 'text-purple-500' : 'text-purple-400'}`} /> Skills
             </h3>
             {skills.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {skills.map((s, i) => (
-                  <span key={i} className="text-xs px-3 py-1 bg-blue-500/15 text-blue-300 border border-blue-500/20 rounded-full">
+                  <span key={i} className={isLight ? 'text-xs px-3 py-1 bg-rose-100 text-rose-700 border border-rose-200 rounded-full' : 'text-xs px-3 py-1 bg-blue-500/15 text-blue-300 border border-blue-500/20 rounded-full'}>
                     {s}
                   </span>
                 ))}
               </div>
             ) : (
-              <p className="text-slate-500 text-sm italic">No skills listed</p>
+              <p className={isLight ? 'text-stone-600 text-sm italic' : 'text-slate-500 text-sm italic'}>No skills listed</p>
             )}
           </div>
 
           {/* Education & Experience */}
-          <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700/50 space-y-4">
+          <div className={isLight ? 'bg-white/80 rounded-2xl p-6 border border-[rgba(var(--hr-border),0.85)] shadow-sm space-y-4' : 'bg-slate-800 rounded-2xl p-6 border border-slate-700/50 space-y-4'}>
             <div>
-              <h3 className="text-slate-300 font-semibold mb-1 flex items-center gap-2">
-                <GraduationCap className="w-4 h-4 text-emerald-400" /> Education
+              <h3 className={isLight ? 'text-stone-900 font-semibold mb-1 flex items-center gap-2' : 'text-slate-300 font-semibold mb-1 flex items-center gap-2'}>
+                <GraduationCap className={`w-4 h-4 ${isLight ? 'text-emerald-500' : 'text-emerald-400'}`} /> Education
               </h3>
-              <p className="text-slate-400 text-sm">{employee.education || <span className="italic text-slate-500">Not specified</span>}</p>
+              <p className={isLight ? 'text-stone-600 text-sm' : 'text-slate-400 text-sm'}>{employee.education || <span className={isLight ? 'italic text-stone-500' : 'italic text-slate-500'}>Not specified</span>}</p>
             </div>
             <div>
-              <h3 className="text-slate-300 font-semibold mb-1 flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-amber-400" /> Experience
+              <h3 className={isLight ? 'text-stone-900 font-semibold mb-1 flex items-center gap-2' : 'text-slate-300 font-semibold mb-1 flex items-center gap-2'}>
+                <Briefcase className={`w-4 h-4 ${isLight ? 'text-amber-500' : 'text-amber-400'}`} /> Experience
               </h3>
-              <p className="text-slate-400 text-sm">{employee.experience || <span className="italic text-slate-500">Not specified</span>}</p>
+              <p className={isLight ? 'text-stone-600 text-sm' : 'text-slate-400 text-sm'}>{employee.experience || <span className={isLight ? 'italic text-stone-500' : 'italic text-slate-500'}>Not specified</span>}</p>
             </div>
           </div>
 
           {/* Details */}
-          <div className="md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700/50">
-            <h3 className="text-slate-300 font-semibold mb-4">Employee Details</h3>
+          <div className={isLight ? 'md:col-span-2 bg-white/80 rounded-2xl p-6 border border-[rgba(var(--hr-border),0.85)] shadow-sm' : 'md:col-span-2 bg-slate-800 rounded-2xl p-6 border border-slate-700/50'}>
+            <h3 className={isLight ? 'text-stone-900 font-semibold mb-4' : 'text-slate-300 font-semibold mb-4'}>Employee Details</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { label: 'Biometric ID', value: employee.biometricId ? `#${employee.biometricId}` : '—' },
@@ -530,14 +675,41 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
                 { label: 'Username', value: employee.user?.username || '—' },
               ].map(d => (
                 <div key={d.label}>
-                  <p className="text-xs text-slate-500 mb-0.5">{d.label}</p>
-                  <p className="text-sm text-slate-200 font-medium">{d.value}</p>
+                  <p className={isLight ? 'text-xs text-stone-600 mb-0.5' : 'text-xs text-slate-500 mb-0.5'}>{d.label}</p>
+                  <p className={isLight ? 'text-sm text-stone-900 font-medium' : 'text-sm text-slate-200 font-medium'}>{d.value}</p>
                 </div>
               ))}
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+const Profile: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const employeeId = parseInt(id || '', 10);
+
+  const initialTab = (() => {
+    const param = new URLSearchParams(location.search).get('tab');
+    if (param === 'leaves' || param === 'performance' || param === 'attendance') return param as Tab;
+    return 'about' as Tab;
+  })();
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        <ProfileView
+          employeeId={employeeId}
+          initialTab={initialTab}
+          onBack={() => navigate('/')}
+          onOpenEmployee={(empId) => navigate(`/profile/${empId}`)}
+        />
+      </div>
     </div>
   );
 };

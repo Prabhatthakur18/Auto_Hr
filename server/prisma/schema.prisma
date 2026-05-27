@@ -45,6 +45,8 @@ model Employee {
   attendance       Attendance[]
   manager          Employee?         @relation("ManagerReports", fields: [managerId], references: [id])
   directReports    Employee[]        @relation("ManagerReports")
+  managers         EmployeeManager[] @relation("EmployeeManagers")
+  managerOf        EmployeeManager[] @relation("ManagerEmployees")
   kras             Kra[]
   leaves           Leave[]
   salaryBreakdowns SalaryBreakdown[]
@@ -53,6 +55,20 @@ model Employee {
 
   @@index([managerId], map: "employees_manager_id_fkey")
   @@map("employees")
+}
+
+model EmployeeManager {
+  id        Int      @id @default(autoincrement())
+  employeeId Int     @map("employee_id")
+  managerId Int      @map("manager_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  employee  Employee @relation("EmployeeManagers", fields: [employeeId], references: [id], onDelete: Cascade)
+  manager   Employee @relation("ManagerEmployees", fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, managerId])
+  @@index([managerId])
+  @@map("employee_managers")
 }
 
 model Attendance {
@@ -187,6 +203,7 @@ enum Role {
   EMPLOYEE
   MANAGER
   HR
+  LEADERSHIP
 }
 
 enum AttendanceStatus {

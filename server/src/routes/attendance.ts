@@ -5,10 +5,15 @@ import * as XLSX from 'xlsx';
 // @ts-ignore
 import ZKLib from 'zkteco-js';
 import prisma from '../config/db.js';
-import { authenticate, authorize, scopeData } from '../middleware/auth.js';
+import {
+    authenticate,
+    authorize,
+    scopeData,
+    assertCanAccessEmployee,
+} from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { ForbiddenError, BadRequestError } from '../utils/errors.js';
+import { BadRequestError } from '../utils/errors.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -182,17 +187,10 @@ router.get(
         const employeeId = parseInt(req.params['employeeId'] as string, 10);
         if (isNaN(employeeId)) throw new BadRequestError('Invalid employee ID');
 
-        // Data isolation check
-        const scope = req.dataScope!;
-        if (scope.type === 'self' && scope.employeeId !== employeeId) {
-            throw new ForbiddenError('You can only view your own attendance');
-        }
-        if (scope.type === 'team' && scope.employeeId !== employeeId) {
-            const isReport = await prisma.employee.findFirst({
-                where: { id: employeeId, managerId: scope.employeeId! },
-            });
-            if (!isReport) throw new ForbiddenError('You can only view your team\'s attendance');
-        }
+        await assertCanAccessEmployee(req, employeeId, {
+            self: 'You can only view your own attendance',
+            team: 'You can only view your team\'s attendance',
+        });
 
         const month = req.query['month'] as string | undefined;
         const startDate = req.query['startDate'] as string | undefined;

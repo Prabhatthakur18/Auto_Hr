@@ -9,6 +9,7 @@ interface PerformanceTabProps {
   summary: PerformanceSummary | null;
   isHR: boolean;
   onRefresh: () => Promise<void>;
+  theme?: 'dark' | 'light';
 }
 
 // ─── Score Badge ─────────────────────────────────────────────
@@ -291,7 +292,8 @@ const KraCard: React.FC<{ kra: Kra; isHR: boolean; onRefresh: () => Promise<void
 
 // ─── Performance Tab ─────────────────────────────────────────
 
-const PerformanceTab: React.FC<PerformanceTabProps> = ({ employeeId, kras, summary, isHR, onRefresh }) => {
+const PerformanceTab: React.FC<PerformanceTabProps> = ({ employeeId, kras, summary, isHR, onRefresh, theme = 'dark' }) => {
+  const isLight = theme === 'light';
   const [addingKra, setAddingKra] = useState(false);
   const [kraForm, setKraForm] = useState({ title: '', description: '', period: 'Ongoing' });
   const [saving, setSaving] = useState(false);
@@ -309,7 +311,7 @@ const PerformanceTab: React.FC<PerformanceTabProps> = ({ employeeId, kras, summa
   };
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${isLight ? 'hr-panel-light' : ''}`}>
       {/* Summary Bar */}
       {summary && (summary.totalKras > 0 || summary.overallScore !== null) && (
         <div className="grid grid-cols-3 gap-4">
