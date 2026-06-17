@@ -26,6 +26,10 @@ const envSchema = z.object({
 
     // CORS
     FRONTEND_URL: z.string().default('http://localhost:5173'),
+
+    // Salary / payroll integration
+    SALARY_API_KEY: z.string().default(''),
+    SALARY_ENCRYPTION_KEY: z.string().default(''),
 });
 
 // Load and validate environment variables
