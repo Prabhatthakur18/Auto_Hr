@@ -182,6 +182,17 @@ export const attendanceApi = {
 // ─── Salary ──────────────────────────────────────────────────
 
 export const salaryApi = {
+    // Self-only endpoints (authenticated user's own salary)
+    getMyBreakdown: () =>
+        request<{ breakdowns: SalaryBreakdown[]; totals: SalaryTotals | null }>('/salary/my/breakdown'),
+
+    getMySlips: () =>
+        request<{ slips: SalarySlip[] }>('/salary/my/slips'),
+
+    getMySlip: (month: string) =>
+        request<{ slip: SalarySlip }>(`/salary/my/slips/${month}`),
+
+    // Admin/manual endpoints (HR or system)
     getBreakdown: (employeeId: number) =>
         request<{ breakdowns: SalaryBreakdown[]; totals: SalaryTotals | null }>(`/salary/breakdown/${employeeId}`),
 
@@ -275,6 +286,7 @@ export interface AuthUser {
         department: string | null;
         email: string | null;
         avatar: string | null;
+        gender: string | null;
     } | null;
 }
 
@@ -289,7 +301,9 @@ export interface Employee {
     joinDate: string | null;
     managerId: number | null;
     avatar: string | null;
+    gender: string | null;
     employeeType: string | null;
+    tallyLedgerName: string | null;
     manager?: { id: number; name: string };
 }
 
@@ -302,6 +316,8 @@ export interface EmployeeDetail extends Employee {
     directReports: Employee[];
     managers?: Array<{ manager: { id: number; name: string; position: string | null; department: string | null } }>;
     user: { id: number; username: string; role: UserRole } | null;
+    gender: string | null;
+    tallyLedgerName: string | null;
 }
 
 export interface EmployeeMutationPayload {
@@ -315,11 +331,13 @@ export interface EmployeeMutationPayload {
     managerId?: number | null;
     managerIds?: number[];
     avatar?: string | null;
+    gender?: string | null;
     bio?: string | null;
     skills?: string[];
     experience?: string | null;
     education?: string | null;
     employeeType?: string | null;
+    tallyLedgerName?: string | null;
 }
 
 export interface ManagerOption {
@@ -341,7 +359,12 @@ export interface Leave {
     status: 'PENDING' | 'APPROVED' | 'REJECTED';
     reason: string | null;
     createdAt: string;
-    employee?: { id: number; name: string; department: string | null };
+    employee?: {
+        id: number;
+        name: string;
+        department: string | null;
+        manager?: { id: number; name: string; department: string | null; position: string | null } | null;
+    };
     approvedBy?: { id: number; username: string } | null;
     approverIds?: string | null;
     comment?: string | null;

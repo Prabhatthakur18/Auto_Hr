@@ -13,7 +13,7 @@ import {
 } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { NotFoundError, ForbiddenError, BadRequestError } from '../utils/errors.js';
+import { NotFoundError, ForbiddenError, BadRequestError, ConflictError } from '../utils/errors.js';
 import { hashPassword } from '../utils/password.js';
 
 const router = Router();
@@ -23,22 +23,34 @@ router.use(authenticate, scopeData);
 
 // ─── Validation schemas ──────────────────────────────────────
 
+const optionalEmail = z.preprocess(
+    (value) => {
+        if (typeof value === 'string' && value.trim() === '') {
+            return undefined;
+        }
+        return value;
+    },
+    z.string().email('Invalid email').max(100).nullable().optional()
+);
+
 const createEmployeeSchema = z.object({
     biometricId: z.number().int().positive().optional().nullable(),
     name: z.string().min(1, 'Name is required').max(100),
     position: z.string().max(100).optional(),
     department: z.string().max(100).optional(),
-    email: z.string().email('Invalid email').max(100).optional(),
+    email: optionalEmail,
     phone: z.string().max(20).optional(),
     joinDate: z.string().optional().nullable(), // ISO date string
     managerId: z.number().int().positive().optional().nullable(),
     managerIds: z.array(z.number().int().positive()).optional(), // Multiple managers
-    avatar: z.string().url().max(500).optional(),
+    avatar: z.string().max(500).optional().nullable(),
+    gender: z.enum(['Male', 'Female', 'Other']).optional().nullable(),
     bio: z.string().optional(),
     skills: z.array(z.string()).optional(),
     experience: z.string().optional(),
     education: z.string().max(255).optional(),
     employeeType: z.string().max(50).optional(),
+    tallyLedgerName: z.string().max(200).optional().nullable(),
 
     // Optional: create a user account for this employee
     createUser: z.boolean().optional(),
@@ -170,7 +182,9 @@ router.get(
                     joinDate: true,
                     managerId: true,
                     avatar: true,
+                    gender: true,
                     employeeType: true,
+                    tallyLedgerName: true,
                     manager: {
                         select: { id: true, name: true },
                     },
@@ -365,12 +379,12 @@ router.get(
         const employee = await prisma.employee.findUnique({
             where: { id },
             include: {
-                manager: {
-                    select: { id: true, name: true, position: true },
-                },
-                managers: {
-                    include: {
-                        manager: {
+                    manager: {
+                        select: { id: true, name: true, position: true },
+                    },
+                    managers: {
+                        include: {
+                            manager: {
                             select: { id: true, name: true, position: true, department: true },
                         },
                     },
@@ -420,6 +434,17 @@ router.post(
         if (managerIds && managerIds.length > 0) {
             for (const mId of managerIds) {
                 await validateManagerAssignment(mId);
+            }
+        }
+
+        if (employeeData.email) {
+            const emailOwner = await prisma.employee.findFirst({
+                where: { email: employeeData.email },
+                select: { id: true },
+            });
+
+            if (emailOwner) {
+                throw new ConflictError('An employee with this email already exists');
             }
         }
 
@@ -487,6 +512,20 @@ router.put(
         if (managerIds && managerIds.length > 0) {
             for (const mId of managerIds) {
                 await validateManagerAssignment(mId, id);
+            }
+        }
+
+        if (updateData.email) {
+            const emailOwner = await prisma.employee.findFirst({
+                where: {
+                    email: updateData.email,
+                    NOT: { id },
+                },
+                select: { id: true },
+            });
+
+            if (emailOwner) {
+                throw new ConflictError('An employee with this email already exists');
             }
         }
 

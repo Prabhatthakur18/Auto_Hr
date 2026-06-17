@@ -85,20 +85,17 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Controls Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         {/* Month Picker */}
-        <div className={`flex items-center gap-3 p-2.5 rounded-xl ${isLight ? 'hr-surface-solid' : 'bg-slate-800 border border-slate-700/50'}`}>
-          <span className={`text-xs font-semibold uppercase tracking-wider ${isLight ? 'text-stone-600' : 'text-slate-400'}`}>Select Month</span>
+        <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-white border border-orange-100 shadow-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-550">Select Month</span>
           <input
             type="month"
             value={targetMonth}
             onChange={(e) => setTargetMonth(e.target.value)}
-            className={isLight
-              ? 'bg-white text-stone-900 text-sm font-semibold border border-[rgba(var(--hr-border),0.85)] rounded-lg px-3 py-1 focus:ring-2 focus:ring-[rgba(var(--hr-accent),0.35)] focus:border-transparent'
-              : 'bg-slate-700 text-white text-sm font-semibold border-0 rounded-lg px-3 py-1 focus:ring-2 focus:ring-blue-500'
-            }
+            className="bg-orange-50/50 text-slate-800 text-sm font-bold border border-orange-100 rounded-xl px-3 py-1 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange cursor-pointer"
           />
         </div>
 
@@ -106,7 +103,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, 
         {isHR && !showManualForm && (
           <button
             onClick={() => setShowManualForm(true)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-white text-sm font-semibold rounded-xl transition-all ${isLight ? 'hr-btn-primary' : 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/10'}`}
+            className="btn-orange px-4 py-2.5 text-xs font-bold rounded-2xl"
           >
             <Plus className="w-4 h-4" /> Add/Edit Log
           </button>
@@ -115,29 +112,29 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, 
 
       {/* Notifications */}
       {error && (
-        <div className={`flex items-center gap-3 p-4 rounded-xl border ${isLight ? 'bg-rose-500/10 border-rose-500/20 text-rose-700' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+        <div className="flex items-center gap-3 p-4 rounded-2xl border bg-red-50 border-red-100 text-red-600 font-semibold text-xs animate-scale-in">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm font-medium">{error}</p>
+          <p>{error}</p>
         </div>
       )}
       {successMsg && (
-        <div className={`flex items-center gap-3 p-4 rounded-xl border ${isLight ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>
+        <div className="flex items-center gap-3 p-4 rounded-2xl border bg-emerald-50 border-emerald-100 text-emerald-700 font-semibold text-xs animate-scale-in">
           <Check className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm font-medium">{successMsg}</p>
+          <p>{successMsg}</p>
         </div>
       )}
 
       {/* Manual Entry Form */}
       {showManualForm && (
-        <div className={`rounded-2xl p-6 space-y-4 ${isLight ? 'hr-surface-solid' : 'bg-slate-800 border border-slate-700/50'}`}>
-          <div className={`flex items-center justify-between pb-3 ${isLight ? 'border-b border-[rgba(var(--hr-border),0.85)]' : 'border-b border-slate-700/50'}`}>
-            <h3 className={`font-bold text-base flex items-center gap-2 ${isLight ? 'text-stone-900' : 'text-white'}`}>
-              <Calendar className={`w-5 h-5 ${isLight ? 'text-rose-500' : 'text-blue-400'}`} />
+        <div className="bg-orange-50/20 rounded-3xl p-6 border border-orange-100/50 shadow-sm space-y-4 animate-scale-in">
+          <div className="flex items-center justify-between pb-3 border-b border-orange-150">
+            <h3 className="font-black text-slate-800 text-base flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-[#f46617]" />
               Manual Attendance Entry
             </h3>
             <button
               onClick={() => setShowManualForm(false)}
-              className={`p-1 rounded-lg transition-colors ${isLight ? 'hover:bg-rose-100 text-stone-500 hover:text-stone-800' : 'hover:bg-slate-700 text-slate-400 hover:text-white'}`}
+              className="p-1 hover:bg-orange-105 rounded-lg text-slate-500 hover:text-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -145,28 +142,22 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, 
 
           <form onSubmit={handleManualSave} className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5 font-medium">Date *</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Date *</label>
               <input
                 type="date"
                 required
                 value={manualForm.date}
                 onChange={(e) => setManualForm((p) => ({ ...p, date: e.target.value }))}
-                className={isLight
-                  ? 'w-full bg-white text-stone-900 text-sm rounded-lg px-3 py-2 border border-[rgba(var(--hr-border),0.9)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--hr-accent),0.35)] focus:border-transparent'
-                  : 'w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500'
-                }
+                className="w-full bg-white text-slate-850 text-sm rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange"
               />
             </div>
 
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5 font-medium">Status</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Status</label>
               <select
                 value={manualForm.status}
                 onChange={(e) => setManualForm((p) => ({ ...p, status: e.target.value as any }))}
-                className={isLight
-                  ? 'w-full bg-white text-stone-900 text-sm rounded-lg px-3 py-2 border border-[rgba(var(--hr-border),0.9)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--hr-accent),0.35)] focus:border-transparent'
-                  : 'w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500'
-                }
+                className="w-full bg-white text-slate-850 text-sm rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange cursor-pointer"
               >
                 <option value="PRESENT">Present</option>
                 <option value="ABSENT">Absent</option>
@@ -177,48 +168,39 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, 
             </div>
 
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5 font-medium">Check In (e.g. 09:15:00)</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Check In</label>
               <input
                 type="text"
                 placeholder="HH:MM:SS"
                 value={manualForm.checkIn}
                 onChange={(e) => setManualForm((p) => ({ ...p, checkIn: e.target.value }))}
-                className={isLight
-                  ? 'w-full bg-white text-stone-900 text-sm rounded-lg px-3 py-2 border border-[rgba(var(--hr-border),0.9)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--hr-accent),0.35)] focus:border-transparent'
-                  : 'w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500'
-                }
+                className="w-full bg-white text-slate-850 text-sm rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange"
               />
             </div>
 
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5 font-medium">Check Out (e.g. 18:30:00)</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Check Out</label>
               <input
                 type="text"
                 placeholder="HH:MM:SS"
                 value={manualForm.checkOut}
                 onChange={(e) => setManualForm((p) => ({ ...p, checkOut: e.target.value }))}
-                className={isLight
-                  ? 'w-full bg-white text-stone-900 text-sm rounded-lg px-3 py-2 border border-[rgba(var(--hr-border),0.9)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--hr-accent),0.35)] focus:border-transparent'
-                  : 'w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-blue-500'
-                }
+                className="w-full bg-white text-slate-850 text-sm rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange"
               />
             </div>
 
-            <div className="md:col-span-4 flex justify-end gap-3 pt-2">
+            <div className="md:col-span-4 flex justify-end gap-3 pt-3 border-t border-orange-100/30">
               <button
                 type="button"
                 onClick={() => setShowManualForm(false)}
-                className={isLight
-                  ? 'px-5 py-2 bg-white hover:bg-rose-50 text-stone-800 text-sm rounded-xl transition-all border border-[rgba(var(--hr-border),0.9)]'
-                  : 'px-5 py-2 bg-slate-700 hover:bg-slate-650 text-white text-sm rounded-xl transition-all'
-                }
+                className="px-5 py-2 bg-white border border-slate-250 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={savingManual}
-                className={`px-5 py-2 text-white text-sm font-semibold rounded-xl transition-all flex items-center gap-2 disabled:opacity-60 ${isLight ? 'hr-btn-primary' : 'bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600'}`}
+                className="btn-orange px-5 py-2 text-xs font-bold rounded-xl"
               >
                 {savingManual ? (
                   <>
@@ -235,43 +217,40 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, 
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           {[
-            { label: 'Present', value: summary.present, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/15' },
-            { label: 'Absent', value: summary.absent, color: 'text-red-400 bg-red-500/10 border-red-500/15' },
-            { label: 'Late Days', value: summary.lateDays, color: 'text-amber-400 bg-amber-500/10 border-amber-500/15' },
-            { label: 'Grace Lates', value: `${summary.graceLateDays}/3`, color: 'text-orange-400 bg-orange-500/10 border-orange-500/15' },
-            { label: 'Avg Late Time', value: `${summary.avgLateMinutes} min`, color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/15' },
-            { label: 'Overtime Days', value: summary.overtimeDays, color: 'text-purple-400 bg-purple-500/10 border-purple-500/15' },
+            { label: 'Present', value: summary.present, color: 'text-emerald-600 bg-emerald-50 border border-emerald-100/35' },
+            { label: 'Absent', value: summary.absent, color: 'text-red-600 bg-red-50 border border-red-100/35' },
+            { label: 'Late Days', value: summary.lateDays, color: 'text-orange-600 bg-orange-50 border border-orange-100/35' },
+            { label: 'Grace Lates', value: `${summary.graceLateDays}/3`, color: 'text-amber-600 bg-amber-50 border border-amber-100/35' },
+            { label: 'Avg Late Time', value: `${summary.avgLateMinutes} min`, color: 'text-cyan-600 bg-cyan-50 border border-cyan-100/35' },
+            { label: 'Overtime Days', value: summary.overtimeDays, color: 'text-purple-600 bg-purple-50 border border-purple-100/35' },
           ].map((stat) => (
-            <div key={stat.label} className={`rounded-2xl p-4 text-center border ${stat.color}`}>
-              <p className="text-3xl font-extrabold">{stat.value}</p>
-              <p className="text-xs font-semibold opacity-85 mt-1">{stat.label}</p>
+            <div key={stat.label} className={`rounded-2xl p-4 text-center ${stat.color}`}>
+              <p className="text-2xl font-black">{stat.value}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider opacity-85 mt-1">{stat.label}</p>
             </div>
           ))}
         </div>
       )}
 
       {/* Daily log table */}
-      <div className={`rounded-2xl overflow-hidden ${isLight ? 'hr-surface-solid hr-table-light' : 'bg-slate-800 border border-slate-700/50'}`}>
+      <div className="rounded-3xl overflow-hidden border border-orange-100/50 bg-white shadow-card">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className={`w-8 h-8 animate-spin ${isLight ? 'text-rose-500' : 'text-blue-500'}`} />
+            <Loader2 className="w-8 h-8 animate-spin text-[#f46617]" />
           </div>
         ) : attendance.length === 0 ? (
-          <div className="text-center py-16">
-            <Clock className={`w-12 h-12 mx-auto mb-3 ${isLight ? 'text-stone-300' : 'text-slate-650'}`} />
-            <p className={`${isLight ? 'text-stone-600' : 'text-slate-400'} font-medium`}>No attendance logs found for this month</p>
-            <p className={`text-xs mt-1 ${isLight ? 'text-stone-500' : 'text-slate-500'}`}>Select another month or update logs</p>
+          <div className="text-center py-16 bg-orange-50/10">
+            <Clock className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+            <p className="text-slate-500 font-bold">No attendance logs found for this month</p>
+            <p className="text-xs mt-1 text-slate-400 font-medium">Select another month or update logs</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className={isLight
-                  ? 'border-b border-[rgba(var(--hr-border),0.85)] text-stone-600 font-semibold bg-rose-50/60'
-                  : 'border-b border-slate-700/50 text-slate-400 font-semibold bg-slate-900/40'
-                }>
+                <tr className="border-b border-orange-100/40 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-orange-50/60">
                   <th className="py-4 px-6 whitespace-nowrap min-w-[110px]">Date</th>
                   <th className="py-4 px-5 whitespace-nowrap min-w-[85px]">Day</th>
                   <th className="py-4 px-5 whitespace-nowrap min-w-[85px]">Check In</th>
@@ -282,50 +261,50 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, 
                   <th className="py-4 px-6 whitespace-nowrap min-w-[80px]">Status</th>
                 </tr>
               </thead>
-              <tbody className={isLight ? 'divide-y divide-[rgba(var(--hr-border),0.7)]' : 'divide-y divide-slate-700/30'}>
+              <tbody className="divide-y divide-orange-100/20">
                 {attendance.map((record) => (
-                  <tr key={`${record.id ?? record.date}`} className={`align-middle ${isLight ? 'hover:bg-rose-50/50 transition-colors' : 'hover:bg-slate-750/30 transition-colors'}`}>
-                    <td className={`py-4 px-6 font-semibold whitespace-nowrap min-w-[110px] ${isLight ? 'text-stone-900' : 'text-slate-200'}`}>
+                  <tr key={`${record.id ?? record.date}`} className="align-middle hover:bg-orange-50/10 transition-colors">
+                    <td className="py-4 px-6 font-bold whitespace-nowrap min-w-[110px] text-slate-800">
                       {new Date(record.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
-                    <td className={`py-4 px-5 whitespace-nowrap min-w-[85px] ${isLight ? 'text-stone-600' : 'text-slate-400'}`}>{record.day || '—'}</td>
-                    <td className={`py-4 px-5 font-mono whitespace-nowrap min-w-[85px] ${isLight ? 'text-stone-700' : 'text-slate-300'}`}>{record.checkIn || '—'}</td>
-                    <td className={`py-4 px-5 font-mono whitespace-nowrap min-w-[85px] ${isLight ? 'text-stone-700' : 'text-slate-300'}`}>{record.checkOut || '—'}</td>
-                    <td className={`py-4 px-5 font-mono font-medium whitespace-nowrap min-w-[95px] ${isLight ? 'text-stone-800' : 'text-slate-200'}`}>{record.totalWorkingHours || '—'}</td>
-                    <td className={`py-4 px-5 min-w-[100px] ${isLight ? 'text-stone-700' : 'text-slate-300'}`}>
+                    <td className="py-4 px-5 whitespace-nowrap min-w-[85px] text-slate-500 font-semibold">{record.day || '—'}</td>
+                    <td className="py-4 px-5 font-mono whitespace-nowrap min-w-[85px] text-slate-600">{record.checkIn || '—'}</td>
+                    <td className="py-4 px-5 font-mono whitespace-nowrap min-w-[85px] text-slate-600">{record.checkOut || '—'}</td>
+                    <td className="py-4 px-5 font-mono font-bold whitespace-nowrap min-w-[95px] text-[#f46617]">{record.totalWorkingHours || '—'}</td>
+                    <td className="py-4 px-5 min-w-[100px] text-slate-700">
                       {record.isLate ? (
-                        <span className={isLight ? 'text-xs font-semibold px-2.5 py-1 bg-amber-100 text-amber-800 border border-amber-300 rounded-full inline-block whitespace-nowrap' : 'text-xs font-semibold px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full inline-block whitespace-nowrap'}>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-orange-50 text-orange-600 border border-orange-150 rounded-full inline-block whitespace-nowrap">
                           Late ({record.lateBy})
                         </span>
                       ) : record.isGraceLate ? (
-                        <span className={isLight ? 'text-xs font-semibold px-2.5 py-1 bg-orange-100 text-orange-800 border border-orange-300 rounded-full inline-block whitespace-nowrap' : 'text-xs font-semibold px-2.5 py-1 bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-full inline-block whitespace-nowrap'}>
-                          Grace Late ({record.lateBy})
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-amber-50 text-amber-600 border border-amber-200 rounded-full inline-block whitespace-nowrap">
+                          Grace ({record.lateBy})
                         </span>
                       ) : (
-                        <span className={isLight ? 'text-stone-500' : 'text-slate-500'}>—</span>
+                        <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className={`py-4 px-5 min-w-[95px] ${isLight ? 'text-stone-700' : 'text-slate-300'}`}>
+                    <td className="py-4 px-5 min-w-[95px] text-slate-700">
                       {record.overtime ? (
-                        <span className={isLight ? 'text-xs font-semibold px-2.5 py-1 bg-purple-100 text-purple-800 border border-purple-300 rounded-full inline-block whitespace-nowrap' : 'text-xs font-semibold px-2.5 py-1 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-full inline-block whitespace-nowrap'}>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-purple-50 text-purple-650 border border-purple-150 rounded-full inline-block whitespace-nowrap">
                           Yes ({record.otTime})
                         </span>
                       ) : (
-                        <span className={isLight ? 'text-stone-500' : 'text-slate-500'}>—</span>
+                        <span className="text-slate-400">—</span>
                       )}
                     </td>
                     <td className="py-4 px-6 min-w-[80px]">
                       <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full border inline-block whitespace-nowrap ${
+                        className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border inline-block whitespace-nowrap ${
                           record.status === 'PRESENT'
-                            ? isLight ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/15'
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-150'
                             : record.status === 'ABSENT'
-                            ? isLight ? 'bg-red-100 text-red-800 border-red-300' : 'bg-red-500/10 text-red-400 border-red-500/15'
+                            ? 'bg-red-50 text-red-650 border-red-150'
                             : record.status === 'HOLIDAY'
-                            ? isLight ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-blue-500/10 text-blue-400 border-blue-500/15'
+                            ? 'bg-blue-50 text-blue-600 border-blue-150'
                             : record.status === 'ON_LEAVE'
-                            ? isLight ? 'bg-purple-100 text-purple-800 border-purple-300' : 'bg-purple-500/10 text-purple-400 border-purple-500/15'
-                            : isLight ? 'bg-slate-100 text-slate-800 border-slate-300' : 'bg-slate-500/10 text-slate-400 border-slate-500/15'
+                            ? 'bg-purple-50 text-purple-600 border-purple-150'
+                            : 'bg-slate-50 text-slate-600 border-slate-150'
                         }`}
                       >
                         {record.status === 'HOLIDAY' && record.holidayName

@@ -386,7 +386,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
             <button
               onClick={prevMonth}
               className={isLight
-                ? 'p-1.5 rounded-lg hover:bg-rose-100 text-stone-600 hover:text-stone-900 transition-colors'
+                ? 'p-1.5 rounded-lg hover:bg-orange-100 text-slate-655 hover:text-slate-800 transition-colors'
                 : 'p-1.5 rounded-lg hover:bg-slate-700/60 text-slate-400 hover:text-white transition-colors'
               }
             >
@@ -398,7 +398,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
             <button
               onClick={nextMonth}
               className={isLight
-                ? 'p-1.5 rounded-lg hover:bg-rose-100 text-stone-600 hover:text-stone-900 transition-colors'
+                ? 'p-1.5 rounded-lg hover:bg-orange-100 text-slate-655 hover:text-slate-800 transition-colors'
                 : 'p-1.5 rounded-lg hover:bg-slate-700/60 text-slate-400 hover:text-white transition-colors'
               }
             >
@@ -410,7 +410,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
                 setViewYear(now.getFullYear());
               }}
               className={isLight
-                ? 'text-xs text-stone-600 hover:text-rose-600 ml-1 px-2 py-1 rounded-md hover:bg-rose-50 transition-all'
+                ? 'text-xs text-slate-500 hover:text-[#f46617] ml-1 px-2 py-1 rounded-md hover:bg-orange-50 transition-all'
                 : 'text-xs text-slate-500 hover:text-blue-400 ml-1 px-2 py-1 rounded-md hover:bg-slate-700/40 transition-all'
               }
             >
@@ -423,8 +423,8 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
               onClick={applyMode ? exitApply : () => { setApplyMode(true); setSelStart(null); setSelEnd(null); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 applyMode
-                  ? (isLight ? 'bg-rose-500/10 text-rose-700 border border-rose-500/20 hover:bg-rose-500/15' : 'bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25')
-                  : (isLight ? 'hr-btn-primary' : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20 hover:shadow-blue-600/35 hover:brightness-110')
+                  ? (isLight ? 'bg-orange-500/10 text-orange-700 border border-orange-500/20 hover:bg-orange-500/15' : 'bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25')
+                  : (isLight ? 'btn-orange' : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20 hover:shadow-blue-600/35 hover:brightness-110')
               }`}
             >
               {applyMode ? (
@@ -439,10 +439,10 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
         {/* Apply mode instruction banner */}
         {applyMode && (
           <div className={isLight
-            ? 'px-5 py-2.5 bg-rose-50 border-b border-[rgba(var(--hr-border),0.85)] flex items-center gap-2 animate-fadeIn'
+            ? 'px-5 py-2.5 bg-orange-50 border-b border-orange-100 flex items-center gap-2 animate-fadeIn'
             : 'px-5 py-2.5 bg-blue-500/8 border-b border-blue-500/15 flex items-center gap-2 animate-fadeIn'
           }>
-            <Info className={`w-4 h-4 flex-shrink-0 ${isLight ? 'text-rose-600' : 'text-blue-400'}`} />
+            <Info className={`w-4 h-4 flex-shrink-0 ${isLight ? 'text-[#f46617]' : 'text-blue-400'}`} />
             <p className={`text-xs ${isLight ? 'text-stone-700' : 'text-blue-300'}`}>
               {!selStart
                 ? 'Click on a start date to begin selecting your leave range.'
@@ -454,12 +454,12 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
         )}
 
         {/* Day-of-week headers */}
-        <div className={isLight ? 'grid grid-cols-7 border-b border-[rgba(var(--hr-border),0.85)] bg-rose-50/60' : 'grid grid-cols-7 border-b border-slate-700/30 bg-slate-800/50'}>
+        <div className={isLight ? 'grid grid-cols-7 border-b border-orange-100 bg-orange-50/60' : 'grid grid-cols-7 border-b border-slate-700/30 bg-slate-800/50'}>
           {DAYS_OF_WEEK.map(d => (
             <div
               key={d}
               className={`py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider ${
-                d === 'Sun' ? (isLight ? 'text-rose-600' : 'text-red-400/60') : (isLight ? 'text-stone-600' : 'text-slate-500')
+                d === 'Sun' ? (isLight ? 'text-[#f46617]' : 'text-red-400/60') : (isLight ? 'text-slate-655' : 'text-slate-500')
               }`}
             >
               {d}
@@ -503,20 +503,20 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
                     isLight ? 'border-[rgba(var(--hr-border),0.7)]' : 'border-slate-700/15'
                   }`,
                   !cell.current && 'opacity-25 pointer-events-none',
-                  cell.current && applyMode && !blocked && (isLight ? 'cursor-pointer hover:bg-rose-50/50' : 'cursor-pointer hover:bg-slate-700/30'),
+                  cell.current && applyMode && !blocked && (isLight ? 'cursor-pointer hover:bg-orange-50/50' : 'cursor-pointer hover:bg-slate-700/30'),
                   cell.current && applyMode && blocked && 'cursor-not-allowed opacity-35',
-                  selected && (isLight ? 'bg-rose-100/50 ring-1 ring-inset ring-rose-300' : 'bg-blue-600/15 ring-1 ring-inset ring-blue-500/30'),
-                  isToday && !selected && (isLight ? 'bg-rose-50/70' : 'bg-slate-700/25'),
+                  selected && (isLight ? 'bg-orange-100/50 ring-1 ring-inset ring-brand-orange/40' : 'bg-blue-600/15 ring-1 ring-inset ring-blue-500/30'),
+                  isToday && !selected && (isLight ? 'bg-orange-50/70' : 'bg-slate-700/25'),
                 ].filter(Boolean).join(' ')}
               >
                 {/* Day number badge */}
                 <span
                   className={[
                     'text-sm font-medium inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors',
-                    isToday && (isLight ? 'bg-rose-500 text-white shadow-sm shadow-rose-500/40' : 'bg-blue-500 text-white shadow-sm shadow-blue-500/40'),
-                    !isToday && cell.current && !selected && (isSunday ? (isLight ? 'text-rose-600/70' : 'text-red-400/70') : (isLight ? 'text-stone-700' : 'text-slate-300')),
-                    !isToday && !cell.current && (isLight ? 'text-stone-400' : 'text-slate-600'),
-                    selected && !isToday && (isLight ? 'text-rose-700' : 'text-blue-200'),
+                    isToday && (isLight ? 'bg-[#f46617] text-white shadow-sm shadow-orange-500/40' : 'bg-blue-500 text-white shadow-sm shadow-blue-500/40'),
+                    !isToday && cell.current && !selected && (isSunday ? (isLight ? 'text-orange-600/70' : 'text-red-400/70') : (isLight ? 'text-slate-700' : 'text-slate-300')),
+                    !isToday && !cell.current && (isLight ? 'text-slate-400' : 'text-slate-600'),
+                    selected && !isToday && (isLight ? 'text-[#f46617]' : 'text-blue-200'),
                   ].filter(Boolean).join(' ')}
                 >
                   {cell.day}
@@ -555,7 +555,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
         </div>
 
         {/* Legend bar */}
-        <div className={isLight ? 'px-5 py-3 border-t border-[rgba(var(--hr-border),0.85)] flex items-center gap-5 flex-wrap bg-rose-50/60' : 'px-5 py-3 border-t border-slate-700/30 flex items-center gap-5 flex-wrap bg-slate-800/50'}>
+        <div className={isLight ? 'px-5 py-3 border-t border-orange-100 flex items-center gap-5 flex-wrap bg-orange-50/60' : 'px-5 py-3 border-t border-slate-700/30 flex items-center gap-5 flex-wrap bg-slate-800/50'}>
           {[
             { color: 'bg-emerald-400', label: 'Approved' },
             { color: 'bg-amber-400', label: 'Pending' },
@@ -563,11 +563,11 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
           ].map(l => (
             <div key={l.label} className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${l.color}`} />
-              <span className={`text-[11px] ${isLight ? 'text-stone-600' : 'text-slate-400'}`}>{l.label}</span>
+              <span className={`text-[11px] ${isLight ? 'text-slate-550' : 'text-slate-400'}`}>{l.label}</span>
             </div>
           ))}
-          <div className={`ml-auto text-[11px] ${isLight ? 'text-stone-600' : 'text-slate-500'}`}>
-            Paid balance: <span className={`font-semibold ${paidBalance.remaining > 0 ? (isLight ? 'text-rose-600' : 'text-blue-400') : (isLight ? 'text-red-600' : 'text-red-400')}`}>
+          <div className={`ml-auto text-[11px] ${isLight ? 'text-slate-555' : 'text-slate-500'}`}>
+            Paid balance: <span className={`font-semibold ${paidBalance.remaining > 0 ? (isLight ? 'text-[#f46617]' : 'text-blue-400') : (isLight ? 'text-red-600' : 'text-red-400')}`}>
               {paidBalance.remaining}
             </span>
             {' / '}{paidBalance.total} (used {paidBalance.used})
@@ -589,21 +589,21 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
         >
           <div
             className={isLight
-              ? 'backdrop-blur-sm rounded-xl p-3.5 min-w-[230px] max-w-[290px] shadow-2xl shadow-rose-200/40 border border-[rgba(var(--hr-border),0.9)]'
+              ? 'backdrop-blur-md rounded-2xl p-4 min-w-[230px] max-w-[290px] shadow-2xl shadow-orange-200/20 border border-orange-100 bg-white'
               : 'bg-slate-900/95 backdrop-blur-sm border border-slate-600/60 rounded-xl p-3.5 shadow-2xl shadow-black/40 min-w-[230px] max-w-[290px]'}
           >
             {/* Status badge */}
             <div className="flex items-center gap-2 mb-2">
-              {tooltip.leave.status === 'APPROVED' && <CheckCircle className={`w-3.5 h-3.5 ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />}
-              {tooltip.leave.status === 'PENDING' && <Clock className={`w-3.5 h-3.5 ${isLight ? 'text-amber-600' : 'text-amber-400'}`} />}
-              {tooltip.leave.status === 'REJECTED' && <XCircle className={`w-3.5 h-3.5 ${isLight ? 'text-red-600' : 'text-red-400'}`} />}
+              {tooltip.leave.status === 'APPROVED' && <CheckCircle className={`w-3.5 h-3.5 ${isLight ? 'text-emerald-650' : 'text-emerald-400'}`} />}
+              {tooltip.leave.status === 'PENDING' && <Clock className={`w-3.5 h-3.5 ${isLight ? 'text-amber-650' : 'text-amber-400'}`} />}
+              {tooltip.leave.status === 'REJECTED' && <XCircle className={`w-3.5 h-3.5 ${isLight ? 'text-red-650' : 'text-red-400'}`} />}
               <span
                 className={`text-[11px] font-bold uppercase tracking-wider ${
                   tooltip.leave.status === 'APPROVED'
-                    ? (isLight ? 'text-emerald-700' : 'text-emerald-400')
+                    ? (isLight ? 'text-emerald-750' : 'text-emerald-400')
                     : tooltip.leave.status === 'PENDING'
-                      ? (isLight ? 'text-amber-700' : 'text-amber-400')
-                      : (isLight ? 'text-red-700' : 'text-red-400')
+                      ? (isLight ? 'text-amber-750' : 'text-amber-400')
+                      : (isLight ? 'text-red-750' : 'text-red-400')
                 }`}
               >
                 {tooltip.leave.status}
@@ -639,7 +639,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
 
             {/* Arrow */}
             <div className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-full">
-              <div className={isLight ? 'w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[rgba(var(--hr-border),0.9)]' : 'w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-slate-600/60'} />
+              <div className={isLight ? 'w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-orange-105' : 'w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-slate-600/60'} />
             </div>
           </div>
         </div>
@@ -657,22 +657,22 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
           />
 
           {/* Dialog card */}
-          <div className={isLight ? 'relative rounded-2xl shadow-2xl shadow-rose-200/40 w-full max-w-lg max-h-[90vh] overflow-y-auto hr-surface' : 'relative bg-slate-800 rounded-2xl border border-slate-600/50 shadow-2xl shadow-black/50 w-full max-w-lg max-h-[90vh] overflow-y-auto'}>
+          <div className={isLight ? 'relative rounded-[32px] shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white border border-orange-100/50' : 'relative bg-slate-800 rounded-2xl border border-slate-600/50 shadow-2xl shadow-black/50 w-full max-w-lg max-h-[90vh] overflow-y-auto'}>
             {/* Dialog header */}
-            <div className={isLight ? 'flex items-center justify-between p-5 border-b border-[rgba(var(--hr-border),0.85)] sticky top-0 bg-white/40 z-10' : 'flex items-center justify-between p-5 border-b border-slate-700/50 sticky top-0 bg-slate-800 z-10'}>
+            <div className={isLight ? 'flex items-center justify-between p-6 border-b border-orange-100 sticky top-0 bg-white/80 backdrop-blur z-10' : 'flex items-center justify-between p-5 border-b border-slate-700/50 sticky top-0 bg-slate-800 z-10'}>
               <div>
-                <h3 className={`text-lg font-bold flex items-center gap-2 ${isLight ? 'text-stone-900' : 'text-white'}`}>
-                  <Calendar className={`w-5 h-5 ${isLight ? 'text-rose-500' : 'text-blue-400'}`} />
+                <h3 className={`text-lg font-black text-slate-800 tracking-tight flex items-center gap-2`}>
+                  <Calendar className={`w-5 h-5 text-[#f46617]`} />
                   Apply for Leave
                 </h3>
-                <p className={`text-xs mt-1 ${isLight ? 'text-stone-600' : 'text-slate-400'}`}>
+                <p className={`text-xs mt-1 text-slate-500 font-bold uppercase tracking-wider`}>
                   {fmtDisplay(selStart)} → {fmtDisplay(selEnd)} ·{' '}
-                  <span className={`font-semibold ${isLight ? 'text-stone-900' : 'text-white'}`}>{selDays} day{selDays !== 1 ? 's' : ''}</span>
+                  <span className={`font-black text-slate-850`}>{selDays} day{selDays !== 1 ? 's' : ''}</span>
                 </p>
               </div>
               <button
                 onClick={() => setShowDialog(false)}
-                className={isLight ? 'p-1.5 rounded-lg hover:bg-rose-100 text-stone-600 hover:text-stone-900 transition-colors' : 'p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors'}
+                className={isLight ? 'p-1.5 rounded-xl hover:bg-orange-50 text-slate-500 hover:text-slate-750 transition-colors' : 'p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors'}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -692,7 +692,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
                       className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
                         leaveType === t.value
                           ? `${t.bg} ${t.border} ${t.text}`
-                          : isLight ? 'border-[rgba(var(--hr-border),0.85)] text-stone-600 hover:bg-rose-50/50 hover:text-stone-700' : 'border-slate-700/40 text-slate-400 hover:bg-slate-700/30 hover:text-slate-300'
+                          : isLight ? 'border-orange-105 text-slate-600 hover:bg-orange-50/50 hover:text-slate-850' : 'border-slate-700/40 text-slate-400 hover:bg-slate-700/30 hover:text-slate-300'
                       }`}
                     >
                       <div
@@ -704,7 +704,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
                         }}
                       />
                       <div className="flex-1">
-                        <span className={`text-sm font-medium ${isLight ? 'text-stone-900' : 'text-white'}`}>{t.label}</span>
+                        <span className={`text-sm font-bold ${isLight ? 'text-slate-800' : 'text-white'}`}>{t.label}</span>
                         {t.consumesQuota && (
                           <span className={`ml-2 text-[10px] opacity-50 ${isLight ? 'text-stone-600' : 'text-slate-400'}`}>uses paid quota</span>
                         )}
@@ -731,41 +731,41 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
 
               {/* ── Paid Leave Balance Info ─────────────────── */}
               {selTypeInfo?.consumesQuota && (
-                <div
-                  className={`rounded-xl p-4 border transition-colors ${
-                    willExceed
-                      ? isLight ? 'bg-red-100/50 border-red-200' : 'bg-red-500/10 border-red-500/25'
-                      : isLight ? 'bg-rose-50/70 border-rose-200/60' : 'bg-blue-500/8 border-blue-500/20'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    {willExceed ? (
-                      <AlertTriangle className={`w-4 h-4 ${isLight ? 'text-red-600' : 'text-red-400'}`} />
-                    ) : (
-                      <Info className={`w-4 h-4 ${isLight ? 'text-rose-600' : 'text-blue-400'}`} />
-                    )}
-                    <span
-                      className={`text-xs font-bold ${
-                        willExceed ? (isLight ? 'text-red-700' : 'text-red-400') : (isLight ? 'text-rose-700' : 'text-blue-400')
-                      }`}
-                    >
-                      {willExceed ? 'Exceeds Paid Leave Quota!' : 'Paid Leave Balance'}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-4 mt-1">
-                    <span className={`text-sm ${isLight ? 'text-stone-700' : 'text-slate-300'}`}>
-                      Remaining:{' '}
+                  <div
+                    className={`rounded-2xl p-4 border transition-colors ${
+                      willExceed
+                        ? isLight ? 'bg-red-100/50 border-red-200' : 'bg-red-500/10 border-red-500/25'
+                        : isLight ? 'bg-orange-50/60 border-orange-100' : 'bg-blue-500/8 border-blue-500/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      {willExceed ? (
+                        <AlertTriangle className={`w-4 h-4 ${isLight ? 'text-red-650' : 'text-red-400'}`} />
+                      ) : (
+                        <Info className={`w-4 h-4 ${isLight ? 'text-[#f46617]' : 'text-blue-400'}`} />
+                      )}
                       <span
-                        className={`font-bold ${
-                          paidBalance.remaining > 0 ? (isLight ? 'text-rose-600' : 'text-blue-300') : 'text-red-400'
+                        className={`text-xs font-bold ${
+                          willExceed ? (isLight ? 'text-red-750' : 'text-red-400') : (isLight ? 'text-[#f46617]' : 'text-blue-400')
                         }`}
                       >
-                        {paidBalance.remaining}
-                      </span>{' '}
-                      / {paidBalance.total}
-                    </span>
-                    <span className={`text-xs ${isLight ? 'text-stone-600' : 'text-slate-500'}`}>Used: {paidBalance.used}</span>
-                  </div>
+                        {willExceed ? 'Exceeds Paid Leave Quota!' : 'Paid Leave Balance'}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-4 mt-1">
+                      <span className={`text-sm ${isLight ? 'text-slate-700 font-semibold' : 'text-slate-300'}`}>
+                        Remaining:{' '}
+                        <span
+                          className={`font-bold ${
+                            paidBalance.remaining > 0 ? (isLight ? 'text-[#f46617]' : 'text-blue-300') : 'text-red-450'
+                          }`}
+                        >
+                          {paidBalance.remaining}
+                        </span>{' '}
+                        / {paidBalance.total}
+                      </span>
+                      <span className={`text-xs ${isLight ? 'text-slate-500 font-semibold' : 'text-slate-550'}`}>Used: {paidBalance.used}</span>
+                    </div>
                   {willExceed && (
                     <p className={`text-xs mt-2 leading-relaxed ${isLight ? 'text-red-700' : 'text-red-400/80'}`}>
                       ⚠ Applying {selDays} day(s) will exceed your paid quota by{' '}
@@ -801,9 +801,9 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
                   onChange={e => setReason(e.target.value)}
                   rows={3}
                   placeholder="Enter the reason for your leave..."
-                  className={`w-full text-sm rounded-xl px-4 py-3 border focus:outline-none resize-none transition-all ${
+                  className={`w-full text-sm rounded-2xl px-4 py-3 border focus:outline-none resize-none transition-all ${
                     isLight
-                      ? 'bg-white text-stone-900 border-[rgba(var(--hr-border),0.85)] placeholder-stone-500 focus:border-rose-300 focus:ring-1 focus:ring-rose-300/30'
+                      ? 'bg-white text-slate-800 border-orange-105 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange'
                       : 'bg-slate-700/40 text-white border-slate-600/40 placeholder-slate-500 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25'
                   }`}
                 />
@@ -816,8 +816,8 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
                 </label>
                 {loadingApprovers ? (
                   <div className="flex items-center gap-2 py-6 justify-center">
-                    <Loader2 className={`w-4 h-4 animate-spin ${isLight ? 'text-rose-500' : 'text-blue-400'}`} />
-                    <span className={`text-xs ${isLight ? 'text-stone-600' : 'text-slate-400'}`}>Loading approvers…</span>
+                    <Loader2 className={`w-4 h-4 animate-spin ${isLight ? 'text-[#f46617]' : 'text-blue-400'}`} />
+                    <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Loading approvers…</span>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-52 overflow-y-auto pr-1 scrollbar-thin">
@@ -832,8 +832,8 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
                           key={a.userId}
                           className={`flex items-center gap-3 p-3 rounded-xl border transition-all select-none ${
                             checked
-                              ? isLight ? 'bg-rose-50/70 border-rose-200' : 'bg-blue-500/8 border-blue-500/25'
-                              : isLight ? 'border-[rgba(var(--hr-border),0.85)] hover:bg-rose-50/30' : 'border-slate-700/40 hover:bg-slate-700/20'
+                              ? isLight ? 'bg-orange-50/60 border-orange-150' : 'bg-blue-500/8 border-blue-500/25'
+                              : isLight ? 'border-orange-100 hover:bg-orange-50/30' : 'border-slate-700/40 hover:bg-slate-700/20'
                           } ${cannotToggle ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                         >
                           <input
@@ -841,25 +841,25 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
                             checked={checked}
                             disabled={cannotToggle}
                             onChange={() => toggleApprover(a.userId)}
-                            className={`w-4 h-4 rounded border ${isLight ? 'border-rose-300 bg-white accent-rose-500' : 'border-slate-500 bg-slate-700 accent-blue-500'} ${isLight ? 'focus:ring-rose-500/30' : 'focus:ring-blue-500/30'} focus:ring-offset-0`}
+                            className={`w-4 h-4 rounded border ${isLight ? 'border-orange-200 bg-white accent-[#f46617]' : 'border-slate-500 bg-slate-700 accent-blue-500'} ${isLight ? 'focus:ring-brand-orange/30' : 'focus:ring-blue-500/30'} focus:ring-offset-0`}
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className={`text-sm font-medium truncate ${isLight ? 'text-stone-900' : 'text-white'}`}>
+                              <span className={`text-sm font-bold truncate ${isLight ? 'text-slate-800' : 'text-white'}`}>
                                 {a.name}
                               </span>
                               {isHRApprover && (
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${isLight ? 'bg-rose-100 text-rose-700' : 'bg-blue-500/20 text-blue-300'}`}>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isLight ? 'bg-orange-100 text-[#f46617]' : 'bg-blue-500/20 text-blue-300'}`}>
                                   HR
                                 </span>
                               )}
                               {isLeadershipApprover && (
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-500/20 text-amber-300'}`}>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isLight ? 'bg-amber-100 text-amber-700' : 'bg-amber-500/20 text-amber-300'}`}>
                                   Leadership
                                 </span>
                               )}
                               {isManager && (
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-500/20 text-emerald-300'}`}>
                                   Manager
                                 </span>
                               )}
@@ -919,9 +919,9 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
       {/* ═════════════════════════════════════════════════════
        *  RECENT LEAVE REQUESTS LIST
        * ═════════════════════════════════════════════════════ */}
-      <div className={isLight ? 'hr-surface-solid rounded-2xl overflow-hidden' : 'bg-slate-800 rounded-2xl border border-slate-700/50 overflow-hidden'}>
-        <div className={isLight ? 'px-5 py-4 border-b border-[rgba(var(--hr-border),0.85)]' : 'px-5 py-4 border-b border-slate-700/40'}>
-          <h3 className={`text-sm font-semibold uppercase tracking-wider ${isLight ? 'text-stone-700' : 'text-slate-300'}`}>
+      <div className={isLight ? 'bg-white rounded-3xl border border-orange-100/50 shadow-card overflow-hidden' : 'bg-slate-800 rounded-2xl border border-slate-700/50 overflow-hidden'}>
+        <div className={isLight ? 'px-5 py-4 border-b border-orange-100/40 bg-orange-50/25' : 'px-5 py-4 border-b border-slate-700/40'}>
+          <h3 className={`text-sm font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
             Recent Requests
           </h3>
         </div>
@@ -932,13 +932,13 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
             <p className={`text-sm ${isLight ? 'text-stone-600' : 'text-slate-500'}`}>No leave records yet</p>
           </div>
         ) : (
-          <div className={isLight ? 'divide-y divide-[rgba(var(--hr-border),0.7)]' : 'divide-y divide-slate-700/25'}>
+          <div className={isLight ? 'divide-y divide-orange-100/20' : 'divide-y divide-slate-700/25'}>
             {myLeaves.slice(0, 10).map(lv => {
               const typeInfo = LEAVE_TYPES.find(t => t.value === lv.type);
               return (
                 <div
                   key={lv.id}
-                  className={isLight ? 'px-5 py-3.5 flex items-center gap-4 hover:bg-rose-50/50 transition-colors' : 'px-5 py-3.5 flex items-center gap-4 hover:bg-slate-700/15 transition-colors'}
+                  className={isLight ? 'px-5 py-3.5 flex items-center gap-4 hover:bg-orange-50/20 transition-colors' : 'px-5 py-3.5 flex items-center gap-4 hover:bg-slate-700/15 transition-colors'}
                 >
                   {/* Color accent bar */}
                   <div
@@ -947,20 +947,20 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
                   />
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium ${isLight ? 'text-stone-900' : 'text-white'}`}>{lv.type}</p>
-                    <p className={`text-xs mt-0.5 ${isLight ? 'text-stone-600' : 'text-slate-400'}`}>
+                    <p className={`text-sm font-bold ${isLight ? 'text-slate-800' : 'text-white'}`}>{lv.type}</p>
+                    <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-550' : 'text-slate-400'}`}>
                       {fmtDisplay(lv.startDate.split('T')[0])} →{' '}
                       {fmtDisplay(lv.endDate.split('T')[0])} · {lv.days} day
                       {lv.days !== 1 ? 's' : ''}
                     </p>
                     {lv.reason && (
-                      <p className={`text-[11px] mt-0.5 truncate italic ${isLight ? 'text-stone-500' : 'text-slate-500'}`}>
+                      <p className={`text-[11px] mt-0.5 truncate italic ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
                         {lv.reason}
                       </p>
                     )}
                     {lv.comment && (
-                      <p className={`text-[11px] mt-0.5 ${isLight ? 'text-stone-500' : 'text-slate-500'}`}>
-                        Review: <span className={isLight ? 'text-stone-700' : 'text-slate-400'}>"{lv.comment}"</span>
+                      <p className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-555' : 'text-slate-500'}`}>
+                        Review: <span className={isLight ? 'text-slate-700' : 'text-slate-400'}>"{lv.comment}"</span>
                       </p>
                     )}
                   </div>
@@ -970,7 +970,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh
                     {lv.status === 'PENDING' && <Clock className="w-4 h-4 text-amber-400" />}
                     {lv.status === 'REJECTED' && <XCircle className="w-4 h-4 text-red-400" />}
                     <span
-                      className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
                         lv.status === 'APPROVED'
                           ? isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/15 text-emerald-400'
                           : lv.status === 'PENDING'

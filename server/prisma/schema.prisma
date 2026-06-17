@@ -34,11 +34,13 @@ model Employee {
   joinDate         DateTime?         @map("join_date") @db.Date
   managerId        Int?              @map("manager_id")
   avatar           String?           @db.VarChar(500)
+  gender           String?           @db.VarChar(20)
   bio              String?           @db.Text
   skills           String?           @db.LongText
   experience       String?           @db.Text
   education        String?           @db.VarChar(255)
   employeeType     String?           @map("employee_type") @db.VarChar(50)
+  tallyLedgerName  String?           @map("tally_ledger_name") @db.VarChar(200)
   isActive         Boolean           @default(true) @map("is_active")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
@@ -139,9 +141,9 @@ model SalarySlip {
   id              Int      @id @default(autoincrement())
   employeeId      Int      @map("employee_id")
   month           String   @db.VarChar(7)
-  grossSalary     Decimal  @map("gross_salary") @db.Decimal(10, 2)
-  totalDeductions Decimal  @map("total_deductions") @db.Decimal(10, 2)
-  netSalary       Decimal  @map("net_salary") @db.Decimal(10, 2)
+  grossSalary     String   @map("gross_salary") @db.Text
+  totalDeductions String   @map("total_deductions") @db.Text
+  netSalary       String   @map("net_salary") @db.Text
   workingDays     Int      @map("working_days")
   daysPresent     Int      @map("days_present")
   breakdownJson   String?  @map("breakdown_json") @db.LongText

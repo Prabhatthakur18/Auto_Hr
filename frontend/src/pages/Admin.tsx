@@ -1,22 +1,44 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Construction } from 'lucide-react';
+import logoImg from '../images/autologo-removebg-preview.png';
 
 const Admin: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-      <div className="text-center">
-        <Construction className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-        <h1 className="text-2xl font-bold text-white mb-2">Admin Panel</h1>
-        <p className="text-slate-400 mb-6">This section is being rebuilt.</p>
-        <button
-          onClick={() => navigate('/')}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm transition-colors mx-auto"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-        </button>
+    <div className="min-h-screen bg-app-bg relative flex items-center justify-center font-sans p-4 overflow-hidden">
+      {/* Background Glowing Blobs */}
+      <div className="absolute top-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-brand-orange/10 blur-[120px] pointer-events-none animate-pulse-slow" />
+      <div className="absolute bottom-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-blue-400/5 blur-[120px] pointer-events-none animate-pulse-slow" />
+
+      <div className="w-full max-w-md relative z-10 text-center animate-scale-in">
+        <div className="mb-6">
+          <img 
+            src={logoImg} 
+            alt="Autoform India" 
+            className="h-16 mx-auto mb-2 drop-shadow-sm select-none"
+            draggable={false}
+          />
+          <h1 className="text-3xl font-black text-slate-800 tracking-tight leading-none">Auto HR</h1>
+          <p className="text-slate-500 font-semibold text-xs tracking-wider uppercase mt-1.5 opacity-80">Autoform India HR Portal</p>
+        </div>
+
+        <div className="bg-white/85 backdrop-blur-xl border border-orange-100 shadow-2xl p-8 rounded-[32px] flex flex-col items-center">
+          <div className="w-14 h-14 rounded-2xl bg-orange-50 text-[#f46617] border border-orange-100 flex items-center justify-center mb-4 shadow-sm animate-float">
+            <Construction className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-black text-slate-800 tracking-tight mb-1">Admin Panel</h2>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-6">Section Under Construction</p>
+          
+          <button
+            onClick={() => navigate('/')}
+            className="btn-orange w-full py-3 text-sm font-bold rounded-2xl"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Dashboard</span>
+          </button>
+        </div>
       </div>
     </div>
   );

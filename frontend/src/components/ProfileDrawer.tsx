@@ -28,21 +28,21 @@ export const ProfileDrawer: React.FC<{
   }, [tab]);
 
   return (
-    <div className="fixed inset-0 z-[60]">
+    <div className="fixed inset-0 z-[60] font-sans">
       <div
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="absolute inset-y-0 right-0 w-full max-w-[1000px] hr-surface shadow-3xl">
+      <div className="absolute inset-y-0 right-0 w-full max-w-[1000px] bg-white border-l border-orange-100 shadow-2xl animate-slide-in">
         <div className="h-full flex flex-col">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(var(--hr-border),0.9)] bg-white/60 backdrop-blur">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-orange-100 bg-orange-50/20 backdrop-blur">
             <div className="min-w-0">
-              <p className="text-xs font-semibold tracking-wide text-rose-700/80 uppercase">{title}</p>
-              <p className="text-sm text-slate-600 truncate">Employee #{currentEmployeeId}</p>
+              <p className="text-[10px] font-bold tracking-wider text-[#f46617] uppercase">{title}</p>
+              <p className="text-sm text-slate-500 font-semibold mt-0.5">Employee #{currentEmployeeId}</p>
             </div>
             <button
               onClick={onClose}
-              className="p-2 rounded-xl hover:bg-rose-100/70 text-slate-500 hover:text-slate-700 transition-colors"
+              className="p-2 rounded-xl hover:bg-orange-55 text-slate-550 hover:text-slate-700 transition-colors"
               aria-label="Close"
             >
               <X className="w-5 h-5" />

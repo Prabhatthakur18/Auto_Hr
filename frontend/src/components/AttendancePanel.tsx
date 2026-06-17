@@ -159,12 +159,12 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Attendance Module</h2>
-          <p className="text-slate-500 mt-1">
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Attendance</h2>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-0.5">
             {isHR
               ? 'Manage and sync biometric attendance sheets'
               : isManager
@@ -174,104 +174,101 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
         </div>
 
         {/* Global target month filter */}
-        <div className="flex items-center gap-3 bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Target Month</span>
+        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-orange-100 shadow-sm">
+          <span className="text-xs font-bold text-slate-550 uppercase tracking-wider">Target Month</span>
           <input
             type="month"
             value={targetMonth}
             onChange={(e) => setTargetMonth(e.target.value)}
-            className="bg-slate-50 text-slate-700 text-sm font-semibold border-0 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500"
+            className="bg-orange-50/50 text-slate-800 text-sm font-bold border border-orange-100 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange cursor-pointer"
           />
         </div>
       </div>
 
       {/* Notifications */}
       {error && (
-        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl text-red-700">
+        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 font-semibold text-xs animate-scale-in">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm font-medium">{error}</p>
+          <p>{error}</p>
         </div>
       )}
       {successMsg && (
-        <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700">
+        <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-700 font-semibold text-xs animate-scale-in">
           <Check className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm font-medium">{successMsg}</p>
+          <p>{successMsg}</p>
         </div>
       )}
 
       {/* HR Actions Panel */}
       {isHR && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Upload card */}
-          <div className="lg:col-span-3 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <Upload className="w-5 h-5 text-blue-500" />
-              Upload Attendance Data Sheet
-            </h3>
-            
-            {/* File Type tabs */}
-            <div className="flex gap-2 mb-4 bg-slate-100 p-1.5 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setUploadType('biometric')}
-                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                  uploadType === 'biometric' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Biometric raw text (.txt)
-              </button>
-              <button
-                type="button"
-                onClick={() => setUploadType('excel')}
-                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                  uploadType === 'excel' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Attendance Portal Excel (.xlsx)
-              </button>
+        <div className="bg-white rounded-[32px] p-6 border border-orange-100/50 shadow-card">
+          <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+            <Upload className="w-5 h-5 text-[#f46617]" />
+            Upload Attendance Data Sheet
+          </h3>
+          
+          {/* File Type tabs */}
+          <div className="flex gap-2 mb-4 bg-orange-50/40 p-1.5 rounded-2xl border border-orange-100/30">
+            <button
+              type="button"
+              onClick={() => setUploadType('biometric')}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+                uploadType === 'biometric' ? 'bg-white text-[#f46617] shadow-sm border border-orange-100/50' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Biometric raw text (.txt)
+            </button>
+            <button
+              type="button"
+              onClick={() => setUploadType('excel')}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+                uploadType === 'excel' ? 'bg-white text-[#f46617] shadow-sm border border-orange-100/50' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Attendance Portal Excel (.xlsx)
+            </button>
+          </div>
+
+          <form onSubmit={handleFileUpload} className="space-y-4">
+            <div className="border-2 border-dashed border-orange-100 hover:border-brand-orange rounded-3xl p-8 flex flex-col items-center justify-center transition-colors bg-orange-50/10 cursor-pointer relative">
+              <input
+                id="attendance-file-input"
+                type="file"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                accept={uploadType === 'biometric' ? '.txt' : '.xlsx'}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                required
+              />
+              <FileText className="w-12 h-12 text-slate-400 mb-3" />
+              <p className="text-sm font-bold text-slate-700">
+                {file ? file.name : 'Click to select or drag and drop file'}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                {uploadType === 'biometric'
+                  ? 'Upload the S-FB4K biometric machine output text file'
+                  : 'Upload the exported Excel sheet'}
+              </p>
             </div>
 
-            <form onSubmit={handleFileUpload} className="space-y-4">
-              <div className="border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-2xl p-8 flex flex-col items-center justify-center transition-colors bg-slate-50 cursor-pointer relative">
-                <input
-                  id="attendance-file-input"
-                  type="file"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  accept={uploadType === 'biometric' ? '.txt' : '.xlsx'}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  required
-                />
-                <FileText className="w-12 h-12 text-slate-400 mb-3" />
-                <p className="text-sm font-semibold text-slate-700">
-                  {file ? file.name : 'Click to select or drag and drop file'}
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  {uploadType === 'biometric'
-                    ? 'Upload the S-FB4K biometric machine output text file'
-                    : 'Upload the exported Excel sheet'}
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-500 font-medium">
-                  Filtering for month: <strong className="text-slate-800 font-bold">{targetMonth}</strong> (non-matching data ignored)
-                </span>
-                <button
-                  type="submit"
-                  disabled={uploading || !file}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold text-sm rounded-xl shadow-lg shadow-blue-500/10 transition-all flex items-center gap-2"
-                >
-                  {uploading ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" /> Processing...
-                    </>
-                  ) : (
-                    'Process and Import'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+                Filtering for month: <strong className="text-slate-800 font-bold">{targetMonth}</strong> (non-matching data ignored)
+              </span>
+              <button
+                type="submit"
+                disabled={uploading || !file}
+                className="btn-orange px-6 py-2.5 text-sm rounded-xl font-bold"
+              >
+                {uploading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Processing...
+                  </>
+                ) : (
+                  'Process and Import'
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -279,31 +276,34 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Sidebar employee list for scoped attendance browsing */}
         {canBrowseEmployeeAttendance && (
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
-            <div className="max-h-[450px] overflow-y-auto space-y-4">
+          <div className="bg-white rounded-[32px] p-4 border border-orange-100/50 shadow-card space-y-3 lg:col-span-1">
+            <div className="max-h-[450px] overflow-y-auto space-y-4 pr-1">
               {sidebarSections.map((section) => (
                 <div key={section.title} className="space-y-1">
-                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2.5 mb-1.5">
                     {section.title}
                   </h4>
-                  {section.employees.map((emp) => (
-                    <button
-                      key={emp.id}
-                      onClick={() => setSelectedEmployeeId(emp.id)}
-                      className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-sm font-medium transition-all ${
-                        selectedEmployeeId === emp.id
-                          ? 'bg-blue-50 text-blue-600'
-                          : 'text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className="truncate">
-                        {emp.id === user?.employeeId ? `${emp.name} (You)` : emp.name}
-                      </span>
-                      <span className="text-xs text-slate-400">ID: {emp.biometricId || '—'}</span>
-                    </button>
-                  ))}
+                  {section.employees.map((emp) => {
+                    const isSelected = selectedEmployeeId === emp.id;
+                    return (
+                      <button
+                        key={emp.id}
+                        onClick={() => setSelectedEmployeeId(emp.id)}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-2xl text-left text-sm font-semibold transition-all ${
+                          isSelected
+                            ? 'bg-orange-50 text-[#f46617] border border-orange-100/50 shadow-sm'
+                            : 'text-slate-600 hover:bg-orange-50/30 hover:text-slate-900'
+                        }`}
+                      >
+                        <span className="truncate">
+                          {emp.id === user?.employeeId ? `${emp.name} (You)` : emp.name}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-bold flex-shrink-0 ml-1">ID: {emp.biometricId || '—'}</span>
+                      </button>
+                    );
+                  })}
                   {section.employees.length === 0 && (
-                    <p className="px-2 py-1 text-xs text-slate-400 italic">
+                    <p className="px-2.5 py-1 text-xs text-slate-400 italic">
                       No employees available
                     </p>
                   )}
@@ -314,24 +314,24 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
         )}
 
         {/* Selected Employee log panel */}
-        <div className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-100 ${canBrowseEmployeeAttendance ? 'lg:col-span-3' : 'lg:col-span-4'}`}>
+        <div className={`bg-white rounded-[32px] p-6 border border-orange-100/50 shadow-card ${canBrowseEmployeeAttendance ? 'lg:col-span-3' : 'lg:col-span-4'}`}>
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-blue-500" />
+            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-[#f46617]" />
               {canBrowseEmployeeAttendance
-                ? `Attendance Log: ${employees.find((e) => e.id === selectedEmployeeId)?.name || ''}`
+                ? `Log: ${employees.find((e) => e.id === selectedEmployeeId)?.name || ''}`
                 : 'My Attendance Logs'}
             </h3>
             <div className="flex items-center gap-3">
               {isHR && !showManualForm && (
                 <button
                   onClick={() => setShowManualForm(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-all shadow-sm"
+                  className="btn-orange px-3 py-1.5 text-xs font-bold rounded-xl"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add/Edit Log
                 </button>
               )}
-              <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider bg-slate-100 px-2.5 py-1 rounded-full">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider bg-orange-50 px-2.5 py-1 rounded-full border border-orange-100/30">
                 {attendance.length} record{attendance.length !== 1 ? 's' : ''}
               </span>
             </div>
@@ -339,15 +339,15 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
 
           {/* Manual Entry Form */}
           {showManualForm && (
-            <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 mb-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <h3 className="text-slate-900 font-bold text-sm flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-blue-500" />
+            <div className="bg-orange-50/20 rounded-3xl p-5 border border-orange-100/50 mb-6 space-y-4 animate-scale-in">
+              <div className="flex items-center justify-between border-b border-orange-150 pb-3">
+                <h3 className="text-slate-800 font-black text-sm flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-[#f46617]" />
                   Manual Attendance Entry
                 </h3>
                 <button
                   onClick={() => setShowManualForm(false)}
-                  className="p-1 hover:bg-slate-250 rounded-lg text-slate-500 hover:text-slate-800 transition-colors"
+                  className="p-1 hover:bg-orange-100/50 rounded-lg text-slate-500 hover:text-slate-800 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -355,22 +355,22 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
 
               <form onSubmit={handleManualSave} className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1 font-semibold">Date *</label>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Date *</label>
                   <input
                     type="date"
                     required
                     value={manualForm.date}
                     onChange={(e) => setManualForm((p) => ({ ...p, date: e.target.value }))}
-                    className="w-full bg-white text-slate-800 text-xs rounded-lg px-3 py-2 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full bg-white text-slate-800 text-xs rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1 font-semibold">Status</label>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Status</label>
                   <select
                     value={manualForm.status}
                     onChange={(e) => setManualForm((p) => ({ ...p, status: e.target.value as any }))}
-                    className="w-full bg-white text-slate-800 text-xs rounded-lg px-3 py-2 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full bg-white text-slate-800 text-xs rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange cursor-pointer"
                   >
                     <option value="PRESENT">Present</option>
                     <option value="ABSENT">Absent</option>
@@ -381,39 +381,39 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
                 </div>
 
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1 font-semibold">Check In (e.g. 09:15:00)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Check In</label>
                   <input
                     type="text"
                     placeholder="HH:MM:SS"
                     value={manualForm.checkIn}
                     onChange={(e) => setManualForm((p) => ({ ...p, checkIn: e.target.value }))}
-                    className="w-full bg-white text-slate-800 text-xs rounded-lg px-3 py-2 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full bg-white text-slate-800 text-xs rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1 font-semibold">Check Out (e.g. 18:30:00)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Check Out</label>
                   <input
                     type="text"
                     placeholder="HH:MM:SS"
                     value={manualForm.checkOut}
                     onChange={(e) => setManualForm((p) => ({ ...p, checkOut: e.target.value }))}
-                    className="w-full bg-white text-slate-800 text-xs rounded-lg px-3 py-2 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full bg-white text-slate-800 text-xs rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange"
                   />
                 </div>
 
-                <div className="sm:col-span-4 flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <div className="sm:col-span-4 flex justify-end gap-3 pt-3 border-t border-orange-100/30">
                   <button
                     type="button"
                     onClick={() => setShowManualForm(false)}
-                    className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-all"
+                    className="px-4 py-2 bg-white border border-slate-250 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={savingManual}
-                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5"
+                    className="btn-orange px-4 py-2 text-xs font-bold rounded-xl"
                   >
                     {savingManual ? (
                       <>
@@ -430,18 +430,18 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
 
           {/* Monthly stats breakdown */}
           {summary && (
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-6">
               {[
-                { label: 'Present', value: summary.present, color: 'text-emerald-600 bg-emerald-50' },
-                { label: 'Absent', value: summary.absent, color: 'text-red-600 bg-red-50' },
-                { label: 'Late Days', value: summary.lateDays, color: 'text-amber-600 bg-amber-50' },
-                { label: 'Grace Lates', value: `${summary.graceLateDays || 0}/3`, color: 'text-orange-600 bg-orange-50' },
-                { label: 'Avg Late Time', value: `${summary.avgLateMinutes || 0} min`, color: 'text-cyan-600 bg-cyan-50' },
-                { label: 'Overtime Days', value: summary.overtimeDays, color: 'text-purple-600 bg-purple-50' },
+                { label: 'Present', value: summary.present, color: 'text-emerald-600 bg-emerald-50 border border-emerald-100/30' },
+                { label: 'Absent', value: summary.absent, color: 'text-red-650 bg-red-50 border border-red-100/30' },
+                { label: 'Late Days', value: summary.lateDays, color: 'text-orange-600 bg-orange-50 border border-orange-100/30' },
+                { label: 'Grace Lates', value: `${summary.graceLateDays || 0}/3`, color: 'text-amber-600 bg-amber-50 border border-amber-100/30' },
+                { label: 'Avg Late Time', value: `${summary.avgLateMinutes || 0}m`, color: 'text-cyan-600 bg-cyan-50 border border-cyan-100/30' },
+                { label: 'Overtime Days', value: summary.overtimeDays, color: 'text-purple-600 bg-purple-50 border border-purple-100/30' },
               ].map((stat) => (
-                <div key={stat.label} className={`rounded-xl p-4 text-center ${stat.color}`}>
-                  <p className="text-2xl font-bold">{stat.value}</p>
-                  <p className="text-xs font-semibold opacity-85 mt-0.5">{stat.label}</p>
+                <div key={stat.label} className={`rounded-2xl p-3 text-center ${stat.color}`}>
+                  <p className="text-xl font-black">{stat.value}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-80 mt-1">{stat.label}</p>
                 </div>
               ))}
             </div>
@@ -450,20 +450,20 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
           {/* Attendance Log Table */}
           {loading ? (
             <div className="flex items-center justify-center py-20">
-              <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
+              <RefreshCw className="w-8 h-8 text-[#f46617] animate-spin" />
             </div>
           ) : attendance.length === 0 ? (
-            <div className="text-center py-20 text-slate-400">
-              <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p className="font-semibold text-slate-500">No attendance data found</p>
+            <div className="text-center py-20 text-slate-400 bg-orange-50/10 rounded-2xl border border-orange-100/20">
+              <Clock className="w-12 h-12 mx-auto mb-3 opacity-50 text-slate-400" />
+              <p className="font-bold text-slate-500">No attendance data found</p>
               <p className="text-xs text-slate-400 mt-1">Try changing the Target Month or uploading a sheet</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 font-semibold">
-                    <th className="py-3 px-2">Date</th>
+                  <tr className="border-b border-orange-100/40 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                    <th className="py-3 px-3">Date</th>
                     <th className="py-3 px-2">Day</th>
                     <th className="py-3 px-2">Check In</th>
                     <th className="py-3 px-2">Check Out</th>
@@ -473,50 +473,50 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
                     <th className="py-3 px-2">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-orange-100/20">
                   {attendance.map((record) => (
-                    <tr key={`${record.id ?? record.date}`} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3 px-2 font-semibold text-slate-700">
+                    <tr key={`${record.id ?? record.date}`} className="hover:bg-orange-50/10 transition-colors">
+                      <td className="py-3.5 px-3 font-bold text-slate-700">
                         {new Date(record.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                       </td>
-                      <td className="py-3 px-2 text-slate-500">{record.day || '—'}</td>
-                      <td className="py-3 px-2 font-mono text-slate-600">{record.checkIn || '—'}</td>
-                      <td className="py-3 px-2 font-mono text-slate-600">{record.checkOut || '—'}</td>
-                      <td className="py-3 px-2 font-mono font-medium text-slate-700">{record.totalWorkingHours || '—'}</td>
-                      <td className="py-3 px-2">
+                      <td className="py-3.5 px-2 text-slate-500 font-semibold">{record.day || '—'}</td>
+                      <td className="py-3.5 px-2 font-mono text-slate-600">{record.checkIn || '—'}</td>
+                      <td className="py-3.5 px-2 font-mono text-slate-600">{record.checkOut || '—'}</td>
+                      <td className="py-3.5 px-2 font-mono font-bold text-[#f46617]">{record.totalWorkingHours || '—'}</td>
+                      <td className="py-3.5 px-2">
                         {record.isLate ? (
-                          <span className="text-xs font-semibold px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 bg-orange-50 text-orange-600 border border-orange-100 rounded-full">
                             Late ({record.lateBy})
                           </span>
                         ) : record.isGraceLate ? (
-                          <span className="text-xs font-semibold px-2 py-0.5 bg-orange-50 text-orange-600 rounded-full">
-                            Grace Late ({record.lateBy})
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-100 rounded-full">
+                            Grace ({record.lateBy})
                           </span>
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="py-3 px-2">
+                      <td className="py-3.5 px-2">
                         {record.overtime ? (
-                          <span className="text-xs font-semibold px-2 py-0.5 bg-purple-50 text-purple-600 rounded-full">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 bg-purple-50 text-purple-650 border border-purple-100 rounded-full">
                             Yes ({record.otTime})
                           </span>
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="py-3 px-2">
+                      <td className="py-3.5 px-2">
                         <span
-                          className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
                             record.status === 'PRESENT'
-                              ? 'bg-emerald-50 text-emerald-600'
+                              ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                               : record.status === 'ABSENT'
-                              ? 'bg-red-50 text-red-600'
+                              ? 'bg-red-50 text-red-600 border-red-100'
                               : record.status === 'HOLIDAY'
-                              ? 'bg-blue-50 text-blue-600'
+                              ? 'bg-blue-50 text-blue-600 border-blue-100'
                               : record.status === 'ON_LEAVE'
-                              ? 'bg-purple-50 text-purple-600'
-                              : 'bg-slate-50 text-slate-600'
+                              ? 'bg-purple-50 text-purple-600 border-purple-100'
+                              : 'bg-slate-50 text-slate-600 border-slate-100'
                           }`}
                         >
                           {record.status === 'HOLIDAY' && record.holidayName

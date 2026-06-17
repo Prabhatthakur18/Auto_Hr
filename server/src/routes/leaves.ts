@@ -97,7 +97,21 @@ router.get(
         const leaves = await prisma.leave.findMany({
             where,
             include: {
-                employee: { select: { id: true, name: true, department: true } },
+                employee: {
+                    select: {
+                        id: true,
+                        name: true,
+                        department: true,
+                        manager: {
+                            select: {
+                                id: true,
+                                name: true,
+                                department: true,
+                                position: true,
+                            },
+                        },
+                    },
+                },
                 approvedBy: { select: { id: true, username: true } },
             },
             orderBy: { createdAt: 'desc' },
