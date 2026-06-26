@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Mail, KeyRound, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { authApi } from '../services/api';
 
@@ -62,9 +63,9 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ onClos
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in">
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
 
       <div className="relative bg-white rounded-[32px] border border-orange-100/50 shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
         <div className="flex items-center justify-between p-6 border-b border-orange-100/50">
@@ -202,6 +203,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ onClos
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

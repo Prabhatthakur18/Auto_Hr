@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Loader2, Send, Search, AlertTriangle, CheckCircle } from 'lucide-react';
 import { employeeApi, learningApi, type LearningPath, type Employee } from '../services/api';
 import { EmployeeAvatar } from './EmployeeAvatar';
@@ -57,9 +58,9 @@ export const AssignPathDialog: React.FC<AssignPathDialogProps> = ({ path, onClos
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in">
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
 
       <div className="relative bg-white rounded-[32px] border border-orange-100/50 shadow-2xl w-full max-w-lg overflow-hidden animate-scale-in max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-orange-100/50 flex-shrink-0">
@@ -190,6 +191,7 @@ export const AssignPathDialog: React.FC<AssignPathDialogProps> = ({ path, onClos
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

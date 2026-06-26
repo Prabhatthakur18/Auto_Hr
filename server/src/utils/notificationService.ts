@@ -19,7 +19,13 @@ export type NotificationType =
     | 'ILT_SESSION_CANCELLED'
     | 'ILT_WAITLIST_PROMOTED'
     | 'BADGE_EARNED'
-    | 'DOCUMENT_DOWNLOADED';
+    | 'DOCUMENT_DOWNLOADED'
+    | 'COURSE_PUBLISHED'
+    | 'COURSE_COMPLETED'
+    | 'QUIZ_AUTO_SUBMITTED'
+    | 'LIBRARY_DOCUMENT_ADDED'
+    | 'CERTIFICATE_ISSUED'
+    | 'COURSE_CONTENT_UPDATED';
 
 /** Learning notification types that count toward a learner's once-a-day nudge cap. */
 const LEARNING_NUDGE_TYPES: NotificationType[] = ['COURSE_DUE_REMINDER', 'COURSE_OVERDUE', 'COURSE_NUDGE'];

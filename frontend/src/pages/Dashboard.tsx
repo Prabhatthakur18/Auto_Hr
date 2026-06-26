@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import LoginForm from '../components/LoginForm';
 import {
@@ -6,7 +7,7 @@ import {
   LogOut, ChevronRight,
   Home, FileText, BarChart3, Loader2,
   CheckCircle, XCircle, MessageSquare, X, Send, AlertTriangle,
-  UserPlus, Search, Filter, RefreshCw, RotateCcw, GraduationCap, Bell
+  UserPlus, Search, Filter, RefreshCw, RotateCcw, GraduationCap, Bell, BookOpen
 } from 'lucide-react';
 import {
   employeeApi,
@@ -43,6 +44,7 @@ import { ILTSessionsPanel } from '../components/ILTSessionsPanel';
 import { BadgeCatalogPanel } from '../components/BadgeCatalogPanel';
 import { AdminLearningDashboard } from '../components/AdminLearningDashboard';
 import { DocumentManagerPanel } from '../components/DocumentManagerPanel';
+import { ELibraryTab } from '../components/tabs/ELibraryTab';
 import { NotificationBell } from '../components/NotificationBell';
 import logoImg from '../images/autoform-logo.png';
 import {
@@ -191,10 +193,18 @@ const Dashboard: React.FC = () => {
       case 'ILT_SESSION_CANCELLED':
       case 'ILT_WAITLIST_PROMOTED':
       case 'BADGE_EARNED':
+      case 'COURSE_PUBLISHED':
+      case 'COURSE_COMPLETED':
+      case 'QUIZ_AUTO_SUBMITTED':
+      case 'CERTIFICATE_ISSUED':
+      case 'COURSE_CONTENT_UPDATED':
         setActiveTab('learning');
         break;
       case 'DOCUMENT_DOWNLOADED':
         setActiveTab('documents');
+        break;
+      case 'LIBRARY_DOCUMENT_ADDED':
+        setActiveTab('elibrary');
         break;
       default:
         setActiveTab('notifications');
@@ -211,6 +221,7 @@ const Dashboard: React.FC = () => {
     { id: 'salary', label: 'Salary', icon: DollarSign },
     { id: 'documents', label: 'Documents', icon: FileText },
     { id: 'learning', label: 'Learning', icon: GraduationCap },
+    { id: 'elibrary', label: 'E-Library', icon: BookOpen },
     ...(ALL_ACCESS_ROLES.includes(role) ? [
       { id: 'reports', label: 'Reports', icon: BarChart3 },
     ] : []),
@@ -373,6 +384,9 @@ const Dashboard: React.FC = () => {
               )}
               {activeTab === 'documents' && (
                 <DocumentManagerPanel role={role} currentEmployeeId={user?.employeeId ?? null} />
+              )}
+              {activeTab === 'elibrary' && (
+                <ELibraryTab role={role} />
               )}
               {activeTab === 'learning' && (
                 <LearningPage role={role} user={user} departments={allDepartments} />
@@ -1040,10 +1054,10 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
       )}
 
       {/* Add Employee Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+      {showModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in">
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) setShowModal(false); }} />
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) setShowModal(false); }} />
           
           {/* Dialog Box */}
           <div className="relative bg-white rounded-[32px] border border-orange-100/50 shadow-2xl w-full max-w-lg overflow-hidden animate-scale-in max-h-[90vh] flex flex-col">
@@ -1456,7 +1470,8 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -2231,10 +2246,10 @@ const LeavesPanel: React.FC<{
       )}
 
       {/* Review Dialog Modal */}
-      {activeLeave && actionType && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+      {activeLeave && actionType && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in">
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) { setActiveLeave(null); setActionType(null); } }} />
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) { setActiveLeave(null); setActionType(null); } }} />
           
           {/* Dialog Box */}
           <div className="relative bg-white rounded-[32px] border border-orange-100/50 shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
@@ -2320,7 +2335,8 @@ const LeavesPanel: React.FC<{
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, CalendarClock, AlertTriangle, Plus, Loader2 } from 'lucide-react';
 import { learningApi, iltApi, type Course } from '../services/api';
 
@@ -65,9 +66,9 @@ export const ILTSessionComposer: React.FC<ILTSessionComposerProps> = ({ departme
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in">
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
 
       <div className="relative bg-white rounded-[32px] border border-orange-100/50 shadow-2xl w-full max-w-2xl overflow-hidden animate-scale-in max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-orange-100/50 flex-shrink-0">
@@ -202,6 +203,7 @@ export const ILTSessionComposer: React.FC<ILTSessionComposerProps> = ({ departme
           </button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

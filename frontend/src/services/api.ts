@@ -313,6 +313,28 @@ export const documentApi = {
         request<{ documents: EmployeeDocumentDownloadPayload[] }>(`/documents/employees/${employeeId}/download-all`),
 };
 
+export const libraryApi = {
+    list: () => request<{ documents: LibraryDocument[] }>('/library/documents'),
+
+    upload: (title: string, description: string, file: File) => {
+        const formData = new FormData();
+        formData.append('title', title);
+        if (description) formData.append('description', description);
+        formData.append('document', file);
+        return request<{ document: LibraryDocument }>('/library/documents', {
+            method: 'POST',
+            body: formData,
+        });
+    },
+
+    remove: (id: number) => request(`/library/documents/${id}`, { method: 'DELETE' }),
+
+    markRead: (id: number) => request(`/library/documents/${id}/read`, { method: 'POST' }),
+
+    download: (id: number) =>
+        request<{ fileName: string; mimeType: string; contentUrl: string }>(`/library/documents/${id}/download`),
+};
+
 // ─── Salary ──────────────────────────────────────────────────
 
 export const salaryApi = {
@@ -476,6 +498,12 @@ export const learningApi = {
             body: JSON.stringify(data),
         }),
 
+    updateCourseThumbnail: (id: number, data: FormData) =>
+        request<{ course: Course }>(`/learning/courses/${id}/thumbnail`, {
+            method: 'POST',
+            body: data,
+        }),
+
     publishCourse: (id: number) =>
         request<{ course: Course }>(`/learning/courses/${id}/publish`, { method: 'POST' }),
 
@@ -633,6 +661,7 @@ export const learningApi = {
     submitQuizAttempt: (quizId: number, data: {
         answers: { questionId: number; selectedOptionIds: number[] }[];
         startedAt: string;
+        isAutoSubmit?: boolean;
     }) =>
         request<{ attempt: QuizAttemptResult }>(`/learning/quizzes/${quizId}/attempt`, {
             method: 'POST',
@@ -886,6 +915,19 @@ export interface EmployeeDocument {
 
 export interface EmployeeDocumentWithEmployee extends EmployeeDocument {
     employee: Pick<Employee, 'id' | 'name' | 'department' | 'position' | 'avatar' | 'gender'>;
+}
+
+export interface LibraryDocument {
+    id: number;
+    title: string;
+    description: string | null;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    createdAt: string;
+    uploadedBy?: { username: string };
+    isRead: boolean;
+    readCount: number;
 }
 
 export interface EmployeeDocumentDownloadPayload {

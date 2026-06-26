@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ChevronLeft, ChevronRight, Calendar, CheckCircle, XCircle, Clock,
   Plus, X, AlertTriangle, Loader2, Send, Info
@@ -642,17 +643,18 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
               <div className={isLight ? 'w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-orange-105' : 'w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-slate-600/60'} />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ═════════════════════════════════════════════════════
        *  APPLY LEAVE DIALOG  (modal overlay)
        * ═════════════════════════════════════════════════════ */}
-      {showDialog && selStart && selEnd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn">
+      {showDialog && selStart && selEnd && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fadeIn">
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setShowDialog(false)}
           />
 

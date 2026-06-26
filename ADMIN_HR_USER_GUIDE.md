@@ -80,10 +80,19 @@ Before the system is shared with all users, HR/Admin should complete this checkl
 ### Learning Setup
 
 - Create required courses.
+- Add a duration/estimated read time on document modules — this is required for documents and controls how long an employee must spend before they can mark the module complete.
+- Set up quiz questions, options, and the correct answer for each question before publishing a course that includes a quiz.
 - Publish only verified courses.
 - Configure mandatory courses carefully.
 - Assign or nominate courses to the correct employees or departments.
 - Create badges only after deciding the criteria clearly.
+- Use the Manage option on a course to edit details, modules, or quizzes after publishing — review what this changes before using it on a course employees have already started.
+
+### E-Library Setup
+
+- Decide which company-wide PDFs and Word documents should be available to all employees (e.g. policies, handbooks, compliance reading).
+- Upload only final, approved documents — every employee is notified the moment a document is added.
+- Remove outdated documents instead of leaving multiple versions available.
 
 ### Documents Setup
 
@@ -106,6 +115,7 @@ After login, the left menu shows the available sections:
 - Salary
 - Documents
 - Learning
+- E-Library
 - Reports, where available
 
 The notification bell at the top shows important updates such as:
@@ -115,6 +125,12 @@ The notification bell at the top shows important updates such as:
 - Salary slip availability
 - New announcements
 - Learning assignments and reminders
+- New course published
+- Course completed by a team member
+- Quiz auto-submitted due to a tab switch
+- Certificate ready to download
+- Course content updated
+- New E-Library document available
 - Document download notifications
 
 Clicking a notification takes the user to the related section.
@@ -322,7 +338,33 @@ Important note: When HR/Manager downloads an employee document, the employee rec
 
 ---
 
-## 12. Announcements and Company Updates
+## 12. E-Library
+
+The E-Library is different from Document Manager. Document Manager stores each employee's own personal documents. E-Library is a shared collection of company-wide reading material — policies, handbooks, compliance documents, and similar files that every employee should be able to read.
+
+### HR / Manager / Leadership Actions
+
+- Upload a PDF or Word document with a title and an optional description.
+- Search the library by title or description.
+- Remove a document that is outdated or was uploaded in error.
+
+### Employee Actions
+
+- Browse all documents in the library.
+- Mark a document as read.
+- Download a document at any time, whether or not it has been marked as read.
+
+Important note: Everyone in the company is notified the moment a new document is added to the E-Library, except the person who uploaded it.
+
+### Recommended Practice
+
+- Use clear, specific titles so employees know what they are opening, such as `Leave Policy 2026` rather than `Policy Doc`.
+- Add a short description summarizing what the document covers.
+- Remove old versions when uploading an updated document, rather than leaving both available.
+
+---
+
+## 13. Announcements and Company Updates
 
 Announcements are used for official company communication.
 
@@ -368,7 +410,7 @@ Employees can:
 
 ---
 
-## 13. Learning and Development
+## 14. Learning and Development
 
 The Learning section is available to all users.
 
@@ -393,17 +435,53 @@ HR can:
 - Create courses.
 - Add course modules.
 - Add videos, documents, or quiz modules.
+- Set a duration or estimated read time on a module — required for documents, optional for video.
 - Publish or unpublish courses.
 - Mark courses as mandatory.
 - Enable certificates.
 - Assign courses to employees.
 - Nominate employees for courses.
+- Use the **Manage** option on any course card to reopen it later — this is how HR edits course details, adds or removes modules, edits an existing quiz, or publishes/unpublishes/archives a course after it has already been created.
+
+### Editing a Course or Quiz After Publishing
+
+Use the Manage button on a course card (visible to HR, Leadership, and Managers) to:
+
+- Edit the course title, description, audience, mandatory setting, and approval requirement.
+- Add, edit, or remove modules.
+- Edit an existing quiz — change questions, options, or which option is correct.
+- Publish, unpublish, or archive the course.
+
+If anyone has already attempted a quiz, replacing it will ask for confirmation because it erases their attempt history. Confirm only when you are certain the change is needed.
+
+Employees who are already enrolled in a course are notified when HR updates its content, so they know to review what changed.
+
+### Quiz Rules and Tab-Switch Protection
+
+Before an employee can answer quiz questions, they see a rules screen that explains:
+
+- The pass mark and number of attempts allowed.
+- That switching tabs, minimizing the window, or opening another app once the quiz has started will submit the quiz automatically with whatever answers were selected so far.
+
+The Continue button stays disabled for 10 seconds so the employee has time to actually read the rules before starting.
+
+If an employee does switch away mid-quiz, the quiz is submitted immediately and the employee sees a message explaining what happened. The employee's manager and HR are also notified that the quiz was auto-submitted, along with the resulting score, so they can follow up if needed.
+
+### Watch and Read Progress
+
+The **Mark as Complete** button on a video or document module is disabled until the employee has genuinely engaged with the content:
+
+- Video modules (uploaded or YouTube/Vimeo) unlock once about 80% of the video has been watched.
+- Document modules unlock once the employee has spent roughly 80% of the configured duration on that module — this is why setting a duration on document modules during setup matters.
+
+A progress bar shows how close the employee is to unlocking the button. Older modules created before this feature was added, with no duration set, are not gated.
 
 Employees can:
 
 - Browse published courses.
 - Enroll or request approval.
 - Start or continue learning.
+- Watch or read each module long enough to unlock Mark as Complete.
 - Download certificates after completion.
 
 ### Learning Paths
@@ -470,6 +548,7 @@ They can:
 - See overdue learning.
 - Send nudges where allowed.
 - Approve or reject enrollment requests.
+- Use the Pending Approval filter to quickly see which enrollment requests are waiting on a decision, instead of searching through every status.
 
 ### Overview
 
@@ -482,11 +561,13 @@ HR/Admin can see department-level learning progress and drill down into teams an
 - Use mandatory courses only for required training.
 - Set realistic due dates.
 - Review overdue learning weekly.
-- Avoid editing a course heavily after employees have already started it.
+- Set a duration on every document module — without it, the watch/read gate cannot apply and Mark as Complete stays unrestricted.
+- If editing a course employees have already started, keep changes minor where possible — they will be notified, but large changes mid-course can be confusing.
+- Avoid replacing a quiz once people have attempted it unless necessary, since it erases their attempt history.
 
 ---
 
-## 14. Notifications
+## 15. Notifications
 
 Notifications help users stay updated.
 
@@ -503,16 +584,23 @@ Users may receive notifications for:
 - Live training changes
 - Badge earned
 - Document downloads
+- A new course being published (sent to employees in the course's target audience)
+- A team member completing a course (sent to that employee's manager and HR)
+- A quiz being auto-submitted because the employee switched tabs mid-quiz (sent to the employee's manager and HR, with the score)
+- A certificate being ready to download (sent to the employee)
+- A course's content being updated by HR (sent to everyone already enrolled in that course)
+- A new E-Library document being added (sent to everyone except the person who uploaded it)
 
 ### Recommended Practice
 
 - HR/Admin should use notifications as the official in-app alert system.
 - Users should check notifications regularly.
 - Mark all read should be used only after reviewing pending items.
+- Managers should treat a quiz auto-submit notification as a prompt to follow up with the employee, not as proof of wrongdoing — they may have simply been interrupted.
 
 ---
 
-## 15. Reports
+## 16. Reports
 
 Reports are available to HR/Admin and leadership where enabled.
 
@@ -528,7 +616,7 @@ Recommended practice: HR should use filters and exports only for official report
 
 ---
 
-## 16. Search and Filters
+## 17. Search and Filters
 
 Several pages include search and filters.
 
@@ -553,7 +641,7 @@ Recommended practice: If a result is not visible, clear filters first and search
 
 ---
 
-## 17. Recommended Go-Live Process
+## 18. Recommended Go-Live Process
 
 Before sharing the system with all employees:
 
@@ -564,13 +652,15 @@ Before sharing the system with all employees:
 5. Import one payroll file in preview mode and verify the results.
 6. Create one announcement and confirm employees can see it.
 7. Upload one document as employee and test HR download notification.
-8. Create one test learning course and assign it to a small group.
-9. Verify notifications are working.
-10. Share login instructions with employees.
+8. Create one test learning course with a video module, a document module with a duration set, and a quiz, then assign it to a small group.
+9. As a test employee, confirm Mark as Complete stays disabled until the video/document is sufficiently watched or read, take the quiz, and confirm the rules screen and 10-second timer appear before questions are shown.
+10. Upload one test document to the E-Library and confirm employees are notified and can read, mark as read, and download it.
+11. Verify notifications are working, including the new course, completion, certificate, quiz auto-submit, course-update, and E-Library notifications.
+12. Share login instructions with employees.
 
 ---
 
-## 18. Suggested Employee Login Communication
+## 19. Suggested Employee Login Communication
 
 HR can share the following simple message:
 
@@ -585,7 +675,7 @@ Recommended: Ask employees to change their password after first login.
 
 ---
 
-## 19. Common Issues and What to Do
+## 20. Common Issues and What to Do
 
 | Issue | What HR/Admin Should Check |
 | --- | --- |
@@ -596,11 +686,15 @@ Recommended: Ask employees to change their password after first login.
 | Announcement not visible | Check target department, active status, and scheduled date |
 | Course not visible | Check course is published and target department is correct |
 | Document not visible to manager | Check access permissions and employee relation |
+| Mark as Complete stays disabled | Check the module's duration is set (for documents) and that enough of the video/document has actually been watched or read |
+| Quiz questions appear with no rules screen | Refresh the page — the rules screen should always appear first; report this if it does not |
+| Quiz submitted unexpectedly | Likely the employee switched tabs, minimized the window, or opened another app while the quiz was active — this is expected behavior, not an error |
+| E-Library document not visible | Check the document was uploaded successfully and the file type is PDF or Word |
 | Notification not received | Check whether action actually triggered notification and user account exists |
 
 ---
 
-## 20. Data Handling Guidelines
+## 21. Data Handling Guidelines
 
 HR/Admin users should treat system data carefully.
 
@@ -613,7 +707,7 @@ HR/Admin users should treat system data carefully.
 
 ---
 
-## 21. Final Handover Notes
+## 22. Final Handover Notes
 
 Autoform Connect has been prepared as a central employee self-service and HR management system.
 
@@ -625,8 +719,9 @@ The main areas are:
 - Salary and payroll import
 - Payslip download
 - Document manager
+- E-Library
 - Announcements and company updates
-- Learning and development
+- Learning and development, including course/quiz editing and watch/read progress tracking
 - Notifications
 - Reports
 

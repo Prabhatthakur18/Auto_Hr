@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Camera, ImagePlus, Loader2, RotateCcw, X, RefreshCw, Check } from 'lucide-react';
 import { EmployeeAvatar } from './EmployeeAvatar';
 
@@ -541,9 +542,9 @@ export const AvatarUploadPicker: React.FC<AvatarUploadPickerProps> = ({
         onChange={(e) => void handleSourceFile(e.target.files?.[0], e.currentTarget)}
       />
 
-      {cameraOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !capturing && setCameraOpen(false)} />
+      {cameraOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !capturing && setCameraOpen(false)} />
           <div className="relative w-full max-w-md overflow-hidden rounded-[28px] border border-orange-100/60 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-orange-100/60 px-5 py-4">
               <div>
@@ -613,12 +614,13 @@ export const AvatarUploadPicker: React.FC<AvatarUploadPickerProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {cropOpen && cropSource && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/65 backdrop-blur-sm" onClick={() => !cropping && closeCropper()} />
+      {cropOpen && cropSource && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm" onClick={() => !cropping && closeCropper()} />
           <div className="relative w-full max-w-2xl overflow-hidden rounded-[30px] border border-orange-100/60 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-orange-100/60 px-6 py-4">
               <div>
@@ -737,7 +739,8 @@ export const AvatarUploadPicker: React.FC<AvatarUploadPickerProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Loader2, HelpCircle } from 'lucide-react';
 import { learningApi, type CourseQuiz } from '../services/api';
+import { QuizRulesDialog } from './QuizRulesDialog';
 
 interface QuizPlayerProps {
   enrollmentId: number;
@@ -9,11 +10,15 @@ interface QuizPlayerProps {
 }
 
 export const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, onPassed }) => {
+  const [started, setStarted] = useState(false);
   const [answers, setAnswers] = useState<Record<number, Set<number>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ score: number; passed: boolean; gradeLabel: string | null; correctCount: number; totalQuestions: number } | null>(null);
+  const [autoSubmitted, setAutoSubmitted] = useState(false);
   const [error, setError] = useState('');
-  const [startedAt] = useState(() => new Date().toISOString());
+  const [startedAt, setStartedAt] = useState<string | null>(null);
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
 
   const toggleOption = (questionId: number, optionId: number, singleAnswer: boolean) => {
     setAnswers(prev => {
@@ -30,16 +35,19 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, onPassed }) => {
     });
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (isAutoSubmit = false) => {
     setSubmitting(true);
     setError('');
+    if (isAutoSubmit) setAutoSubmitted(true);
     try {
+      const currentAnswers = answersRef.current;
       const payload = {
         answers: quiz.questions.map(q => ({
           questionId: q.id,
-          selectedOptionIds: Array.from(answers[q.id] ?? []),
+          selectedOptionIds: Array.from(currentAnswers[q.id] ?? []),
         })),
-        startedAt,
+        startedAt: startedAt ?? new Date().toISOString(),
+        isAutoSubmit,
       };
       const res = await learningApi.submitQuizAttempt(quiz.id, payload);
       if (res.data?.attempt) {
@@ -59,6 +67,41 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, onPassed }) => {
     }
   };
 
+  // Auto-submit the instant the learner leaves this tab/app once the quiz has actually started —
+  // listeners self-remove on first trigger so a slow submit can't be interrupted by a second event.
+  useEffect(() => {
+    if (!started || result) return;
+
+    const triggerAutoSubmit = () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      handleSubmit(true);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') triggerAutoSubmit();
+    };
+    const handleBlur = () => triggerAutoSubmit();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [started, result]);
+
+  if (!started) {
+    return (
+      <QuizRulesDialog
+        quiz={quiz}
+        onConfirm={() => {
+          setStartedAt(new Date().toISOString());
+          setStarted(true);
+        }}
+      />
+    );
+  }
+
   if (result) {
     return (
       <div className="text-center space-y-4 py-6">
@@ -74,9 +117,15 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, onPassed }) => {
         <p className="text-sm text-slate-600">
           {result.correctCount} of {result.totalQuestions} correct — {result.passed ? 'You passed!' : 'Not passed. Try again if attempts remain.'}
         </p>
+        {autoSubmitted && (
+          <div className="flex items-center gap-2 justify-center text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-2xl px-3.5 py-2.5 max-w-sm mx-auto">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            Submitted automatically — you switched away from the quiz tab
+          </div>
+        )}
         {!result.passed && (
           <button
-            onClick={() => { setResult(null); setAnswers({}); }}
+            onClick={() => { setResult(null); setAnswers({}); setAutoSubmitted(false); setStarted(false); }}
             className="btn-orange px-4 py-2.5 text-xs font-bold rounded-2xl"
           >
             Retry Quiz
@@ -129,7 +178,7 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, onPassed }) => {
       })}
 
       <button
-        onClick={handleSubmit}
+        onClick={() => handleSubmit(false)}
         disabled={submitting}
         className="btn-orange px-4 py-3 text-sm font-bold rounded-2xl flex items-center justify-center gap-2 w-full sm:w-auto"
       >

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { GraduationCap, Plus, Loader2, Clock, BookOpen, Lock, CheckCircle, PlayCircle, UserPlus, Trophy, Check, X, Hourglass, Send } from 'lucide-react';
-import { learningApi, type Course, type Enrollment, type UserRole } from '../services/api';
+import { GraduationCap, Plus, Loader2, Clock, BookOpen, Lock, CheckCircle, PlayCircle, UserPlus, Trophy, Check, X, Hourglass, Send, Settings } from 'lucide-react';
+import { learningApi, type Course, type CourseDetail, type Enrollment, type UserRole } from '../services/api';
 import { CourseComposer } from './CourseComposer';
 import { CourseDetailView } from './CourseDetailView';
 import { AssignCourseDialog } from './AssignCourseDialog';
@@ -32,6 +32,8 @@ export const LearningCatalogPanel: React.FC<LearningCatalogPanelProps> = ({ role
   const [assigningCourse, setAssigningCourse] = useState<Course | null>(null);
   const [nominatingCourse, setNominatingCourse] = useState<Course | null>(null);
   const [respondingId, setRespondingId] = useState<number | null>(null);
+  const [editingCourse, setEditingCourse] = useState<CourseDetail | null>(null);
+  const [managingId, setManagingId] = useState<number | null>(null);
 
   const loadAll = () => {
     setLoading(true);
@@ -88,6 +90,16 @@ export const LearningCatalogPanel: React.FC<LearningCatalogPanelProps> = ({ role
       // non-critical
     } finally {
       setRespondingId(null);
+    }
+  };
+
+  const handleManage = async (courseId: number) => {
+    setManagingId(courseId);
+    try {
+      const res = await learningApi.getCourse(courseId);
+      if (res.data?.course) setEditingCourse(res.data.course);
+    } finally {
+      setManagingId(null);
     }
   };
 
@@ -243,6 +255,17 @@ export const LearningCatalogPanel: React.FC<LearningCatalogPanelProps> = ({ role
                         </button>
                       </div>
                     )}
+
+                    {isHR && (
+                      <button
+                        onClick={() => handleManage(course.id)}
+                        disabled={managingId === course.id}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl w-full justify-center bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 transition-colors"
+                      >
+                        {managingId === course.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Settings className="w-3.5 h-3.5" />}
+                        Manage
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -256,6 +279,15 @@ export const LearningCatalogPanel: React.FC<LearningCatalogPanelProps> = ({ role
           departments={departments}
           onClose={() => setShowComposer(false)}
           onSaved={() => { setShowComposer(false); loadAll(); }}
+        />
+      )}
+
+      {editingCourse && (
+        <CourseComposer
+          departments={departments}
+          editingCourse={editingCourse}
+          onClose={() => setEditingCourse(null)}
+          onSaved={() => { setEditingCourse(null); loadAll(); }}
         />
       )}
 

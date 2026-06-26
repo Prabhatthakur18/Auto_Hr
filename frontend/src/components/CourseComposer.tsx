@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, GraduationCap, Image as ImageIcon, Video, FileText, HelpCircle,
   Link as LinkIcon, AlertTriangle, Plus, Loader2, Trash2, CheckCircle, Upload,
 } from 'lucide-react';
-import { learningApi, type Course, type CourseModule, type ModuleContentType } from '../services/api';
+import { learningApi, type Course, type CourseDetail, type CourseModule, type ModuleContentType } from '../services/api';
 import { QuizBuilder } from './QuizBuilder';
 
 interface CourseComposerProps {
   departments: string[];
+  editingCourse?: CourseDetail | null;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -21,27 +23,28 @@ const CONTENT_TYPE_OPTIONS: { value: ModuleContentType; label: string; icon: Rea
   { value: 'QUIZ', label: 'Quiz', icon: HelpCircle },
 ];
 
-export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onClose, onSaved }) => {
-  const [step, setStep] = useState<'DETAILS' | 'MODULES'>('DETAILS');
-  const [course, setCourse] = useState<Course | null>(null);
-  const [modules, setModules] = useState<CourseModule[]>([]);
+export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, editingCourse, onClose, onSaved }) => {
+  const isEditing = !!editingCourse;
+  const [step, setStep] = useState<'DETAILS' | 'MODULES'>(isEditing ? 'MODULES' : 'DETAILS');
+  const [course, setCourse] = useState<Course | null>(editingCourse ?? null);
+  const [modules, setModules] = useState<CourseModule[]>(editingCourse?.modules ?? []);
   const [quizBuilderModule, setQuizBuilderModule] = useState<CourseModule | null>(null);
 
   // Course detail form state
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState('');
-  const [mandatory, setMandatory] = useState(false);
-  const [targetDepartment, setTargetDepartment] = useState('ALL');
-  const [autoAssign, setAutoAssign] = useState(false);
-  const [autoAssignDueDays, setAutoAssignDueDays] = useState('');
-  const [certificateExpires, setCertificateExpires] = useState(false);
-  const [certificateValidityMonths, setCertificateValidityMonths] = useState('');
-  const [enableRanking, setEnableRanking] = useState(false);
-  const [rankingScope, setRankingScope] = useState<'DEPARTMENT' | 'ORG_WIDE'>('DEPARTMENT');
-  const [rankingAnonymous, setRankingAnonymous] = useState(true);
-  const [requiresApproval, setRequiresApproval] = useState(false);
+  const [title, setTitle] = useState(editingCourse?.title ?? '');
+  const [description, setDescription] = useState(editingCourse?.description ?? '');
+  const [category, setCategory] = useState(editingCourse?.category ?? '');
+  const [durationMinutes, setDurationMinutes] = useState(editingCourse?.durationMinutes != null ? String(editingCourse.durationMinutes) : '');
+  const [mandatory, setMandatory] = useState(editingCourse?.mandatory ?? false);
+  const [targetDepartment, setTargetDepartment] = useState(editingCourse?.targetDepartment ?? 'ALL');
+  const [autoAssign, setAutoAssign] = useState(editingCourse?.autoAssign ?? false);
+  const [autoAssignDueDays, setAutoAssignDueDays] = useState(editingCourse?.autoAssignDueDays != null ? String(editingCourse.autoAssignDueDays) : '');
+  const [certificateExpires, setCertificateExpires] = useState(editingCourse?.certificateValidityMonths != null);
+  const [certificateValidityMonths, setCertificateValidityMonths] = useState(editingCourse?.certificateValidityMonths != null ? String(editingCourse.certificateValidityMonths) : '');
+  const [enableRanking, setEnableRanking] = useState(editingCourse?.enableRanking ?? false);
+  const [rankingScope, setRankingScope] = useState<'DEPARTMENT' | 'ORG_WIDE'>(editingCourse?.rankingScope ?? 'DEPARTMENT');
+  const [rankingAnonymous, setRankingAnonymous] = useState(editingCourse?.rankingAnonymous ?? true);
+  const [requiresApproval, setRequiresApproval] = useState(editingCourse?.requiresApproval ?? false);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
 
   // Module form state
@@ -49,6 +52,7 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
   const [moduleType, setModuleType] = useState<ModuleContentType>('VIDEO_EMBED');
   const [videoLink, setVideoLink] = useState('');
   const [moduleFile, setModuleFile] = useState<File | null>(null);
+  const [moduleDurationMinutes, setModuleDurationMinutes] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -62,6 +66,34 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
     setSubmitting(true);
     setError('');
     try {
+      if (isEditing && course) {
+        const res = await learningApi.updateCourse(course.id, {
+          title: title.trim(),
+          description: description.trim() || null,
+          category: category.trim() || null,
+          durationMinutes: durationMinutes ? Number(durationMinutes) : null,
+          mandatory,
+          targetDepartment: targetDepartment !== 'ALL' ? targetDepartment : null,
+          autoAssign,
+          autoAssignDueDays: autoAssign && autoAssignDueDays ? Number(autoAssignDueDays) : null,
+          certificateValidityMonths: certificateExpires && certificateValidityMonths ? Number(certificateValidityMonths) : null,
+          enableRanking: !mandatory && enableRanking,
+          rankingScope,
+          rankingAnonymous,
+          requiresApproval,
+        });
+        if (res.data?.course) {
+          setCourse(res.data.course);
+          if (thumbnail) {
+            const thumbForm = new FormData();
+            thumbForm.append('thumbnail', thumbnail);
+            await learningApi.updateCourseThumbnail(course.id, thumbForm);
+          }
+          setStep('MODULES');
+        }
+        return;
+      }
+
       const formData = new FormData();
       formData.append('title', title.trim());
       if (description.trim()) formData.append('description', description.trim());
@@ -86,7 +118,38 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
         setStep('MODULES');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to create course');
+      setError(err.message || `Failed to ${isEditing ? 'update' : 'create'} course`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handlePublishToggle = async () => {
+    if (!course) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = course.state === 'PUBLISHED'
+        ? await learningApi.unpublishCourse(course.id)
+        : await learningApi.publishCourse(course.id);
+      if (res.data?.course) setCourse(res.data.course);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update course status');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleArchive = async () => {
+    if (!course) return;
+    if (!window.confirm('Archive this course? It will no longer be visible in the catalog, but existing enrollments and certificates are retained.')) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await learningApi.archiveCourse(course.id);
+      onSaved();
+    } catch (err: any) {
+      setError(err.message || 'Failed to archive course');
     } finally {
       setSubmitting(false);
     }
@@ -111,6 +174,10 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
       setError('File exceeds the 50MB limit');
       return;
     }
+    if (moduleType === 'DOCUMENT' && !moduleDurationMinutes) {
+      setError('Estimated read time is required for document modules — it gates "Mark as Complete" for learners');
+      return;
+    }
 
     setSubmitting(true);
     setError('');
@@ -120,6 +187,7 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
       formData.append('contentType', moduleType);
       if (moduleType === 'VIDEO_EMBED') formData.append('videoLink', videoLink.trim());
       if (moduleFile) formData.append('file', moduleFile);
+      if (moduleDurationMinutes) formData.append('durationMinutes', moduleDurationMinutes);
 
       const res = await learningApi.addModule(course.id, formData);
       if (res.data?.module) {
@@ -130,6 +198,7 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
         setModuleTitle('');
         setVideoLink('');
         setModuleFile(null);
+        setModuleDurationMinutes('');
         setModuleType('VIDEO_EMBED');
       }
     } catch (err: any) {
@@ -176,15 +245,17 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in">
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
 
       <div className="relative bg-white rounded-[32px] border border-orange-100/50 shadow-2xl w-full max-w-2xl overflow-hidden animate-scale-in max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-orange-100/50 flex-shrink-0">
           <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
             <GraduationCap className="w-5 h-5 text-[#f46617]" />
-            {step === 'DETAILS' ? 'New Course' : `Add Modules — ${course?.title}`}
+            {step === 'DETAILS'
+              ? (isEditing ? `Manage Course — ${course?.title}` : 'New Course')
+              : (isEditing ? `Manage Course — ${course?.title}` : `Add Modules — ${course?.title}`)}
           </h3>
           <button
             disabled={submitting}
@@ -409,7 +480,9 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
                 className="w-full btn-orange px-4 py-3 text-sm font-bold rounded-2xl flex items-center justify-center gap-2"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                {submitting ? 'Creating...' : 'Create Course & Add Modules'}
+                {isEditing
+                  ? (submitting ? 'Saving...' : 'Save Details')
+                  : (submitting ? 'Creating...' : 'Create Course & Add Modules')}
               </button>
             </form>
           )}
@@ -426,6 +499,15 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
                         <span className="text-xs font-bold text-slate-400 w-5">{i + 1}</span>
                         <Icon className="w-4 h-4 text-slate-400 flex-shrink-0" />
                         <span className="flex-1 text-sm font-semibold text-slate-700 truncate">{m.title}</span>
+                        {m.contentType === 'QUIZ' && (
+                          <button
+                            type="button"
+                            onClick={() => setQuizBuilderModule(m)}
+                            className="text-xs font-bold text-[#f46617] hover:text-orange-700 flex-shrink-0"
+                          >
+                            {m.quiz ? 'Edit Quiz' : 'Add Quiz'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleRemoveModule(m.id)}
@@ -500,6 +582,27 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
                   </p>
                 )}
 
+                {moduleType !== 'QUIZ' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      {moduleType === 'DOCUMENT' ? 'Estimated Read Time (minutes)' : 'Duration (minutes, optional)'}
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={moduleDurationMinutes}
+                      onChange={e => setModuleDurationMinutes(e.target.value)}
+                      placeholder="e.g. 10"
+                      className="w-full max-w-[160px] px-4 py-2.5 bg-white border border-orange-100 rounded-2xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
+                    />
+                    {moduleType === 'DOCUMENT' && (
+                      <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                        Learners must spend ~80% of this time on the document before "Mark as Complete" unlocks.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   disabled={submitting}
@@ -510,15 +613,37 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
                 </button>
               </form>
 
-              <button
-                type="button"
-                onClick={handlePublish}
-                disabled={submitting || modules.length === 0}
-                className="w-full btn-orange px-4 py-3 text-sm font-bold rounded-2xl flex items-center justify-center gap-2"
-              >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                Publish Course
-              </button>
+              {isEditing ? (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePublishToggle}
+                    disabled={submitting || (course.state !== 'PUBLISHED' && modules.length === 0)}
+                    className="flex-1 btn-orange px-4 py-3 text-sm font-bold rounded-2xl flex items-center justify-center gap-2"
+                  >
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    {course.state === 'PUBLISHED' ? 'Unpublish' : 'Publish'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleArchive}
+                    disabled={submitting}
+                    className="px-4 py-3 bg-slate-50 hover:bg-slate-100 text-slate-500 text-sm font-bold rounded-2xl border border-slate-200 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" /> Archive
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handlePublish}
+                  disabled={submitting || modules.length === 0}
+                  className="w-full btn-orange px-4 py-3 text-sm font-bold rounded-2xl flex items-center justify-center gap-2"
+                >
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                  Publish Course
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -528,10 +653,15 @@ export const CourseComposer: React.FC<CourseComposerProps> = ({ departments, onC
         <QuizBuilder
           moduleId={quizBuilderModule.id}
           moduleTitle={quizBuilderModule.title}
+          existingQuiz={quizBuilderModule.quiz ?? undefined}
           onClose={() => setQuizBuilderModule(null)}
-          onSaved={() => setQuizBuilderModule(null)}
+          onSaved={(quiz) => {
+            setModules(prev => prev.map(m => (m.id === quizBuilderModule.id ? { ...m, quiz } : m)));
+            setQuizBuilderModule(null);
+          }}
         />
       )}
-    </div>
+    </div>,
+    document.body
   );
 };

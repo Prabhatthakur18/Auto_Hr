@@ -23,7 +23,7 @@ const isOverdue = (e: TeamEnrollment) =>
 export const TeamLearningPanel: React.FC<{ filters?: PageFilterState }> = ({ filters }) => {
   const [enrollments, setEnrollments] = useState<TeamEnrollment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'OVERDUE' | 'COMPLETED' | 'IN_PROGRESS' | 'NOT_STARTED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'OVERDUE' | 'PENDING_APPROVAL' | 'COMPLETED' | 'IN_PROGRESS' | 'NOT_STARTED'>('ALL');
   const [nudgingId, setNudgingId] = useState<number | null>(null);
   const [nudgedIds, setNudgedIds] = useState<Set<number>>(new Set());
   const [nudgeError, setNudgeError] = useState<{ id: number; message: string } | null>(null);
@@ -82,6 +82,7 @@ export const TeamLearningPanel: React.FC<{ filters?: PageFilterState }> = ({ fil
   });
 
   const overdueCount = enrollments.filter(isOverdue).length;
+  const pendingApprovalCount = enrollments.filter(e => e.status === 'PENDING_APPROVAL').length;
 
   if (loading) {
     return (
@@ -96,10 +97,11 @@ export const TeamLearningPanel: React.FC<{ filters?: PageFilterState }> = ({ fil
       <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
         {enrollments.length} enrollment{enrollments.length !== 1 ? 's' : ''} across your team
         {overdueCount > 0 && <span className="text-red-500"> · {overdueCount} overdue</span>}
+        {pendingApprovalCount > 0 && <span className="text-amber-600"> · {pendingApprovalCount} awaiting your approval</span>}
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
-        {(['ALL', 'OVERDUE', 'IN_PROGRESS', 'COMPLETED', 'NOT_STARTED'] as const).map(f => (
+        {(['ALL', 'PENDING_APPROVAL', 'OVERDUE', 'IN_PROGRESS', 'COMPLETED', 'NOT_STARTED'] as const).map(f => (
           <button
             key={f}
             onClick={() => setStatusFilter(f)}
@@ -107,7 +109,7 @@ export const TeamLearningPanel: React.FC<{ filters?: PageFilterState }> = ({ fil
               statusFilter === f ? 'bg-[#f46617] text-white shadow-sm shadow-orange-500/30' : 'bg-orange-50/60 text-slate-500 hover:bg-orange-50'
             }`}
           >
-            {f === 'ALL' ? 'All' : f === 'OVERDUE' ? 'Overdue' : f.replace('_', ' ')}
+            {f === 'ALL' ? 'All' : f === 'OVERDUE' ? 'Overdue' : f === 'PENDING_APPROVAL' ? 'Pending Approval' : f.replace('_', ' ')}
           </button>
         ))}
       </div>

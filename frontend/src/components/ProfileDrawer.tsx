@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ProfileView } from '../pages/Profile';
 
 type Tab = 'about' | 'performance' | 'leaves' | 'attendance' | 'documents';
@@ -28,10 +29,10 @@ export const ProfileDrawer: React.FC<{
     return 'Profile';
   }, [tab]);
 
-  return (
-    <div className="fixed inset-0 z-[60] font-sans">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] font-sans">
       <div
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
         onClick={onClose}
       />
       <div className="absolute inset-y-0 right-0 w-full max-w-[1000px] bg-white border-l border-orange-100 shadow-2xl animate-slide-in">
@@ -63,6 +64,7 @@ export const ProfileDrawer: React.FC<{
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

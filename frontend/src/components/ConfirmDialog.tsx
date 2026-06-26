@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X, AlertTriangle } from 'lucide-react';
 
 export interface ConfirmDialogProps {
@@ -31,8 +32,8 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
     : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500';
 
-  return (
-    <div className="fixed inset-0 bg-gray-800/40 backdrop-blur-sm overflow-y-auto h-full w-full z-50">
+  return createPortal(
+    <div className="fixed inset-0 bg-gray-800/40 backdrop-blur-sm overflow-y-auto h-full w-full z-[9999]">
       <div className="relative top-24 mx-auto p-5 w-11/12 max-w-md">
         <div className="relative bg-white rounded-xl shadow-2xl border border-gray-200">
           <button
@@ -73,7 +74,8 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

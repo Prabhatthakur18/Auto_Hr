@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Award, Plus, Loader2, AlertTriangle } from 'lucide-react';
 import { badgeApi, type BadgeCriteriaType } from '../services/api';
 import { BADGE_ICON_KEYS } from '../utils/badgeIcons';
@@ -59,9 +60,9 @@ export const BadgeComposer: React.FC<BadgeComposerProps> = ({ onClose, onSaved }
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in">
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
 
       <div className="relative bg-white rounded-[32px] border border-orange-100/50 shadow-2xl w-full max-w-lg overflow-hidden animate-scale-in max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-orange-100/50 flex-shrink-0">
@@ -182,6 +183,7 @@ export const BadgeComposer: React.FC<BadgeComposerProps> = ({ onClose, onSaved }
           </button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

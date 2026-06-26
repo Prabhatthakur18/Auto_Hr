@@ -6,6 +6,7 @@ import {
 import { learningApi, type EnrollmentDetail, type CourseModule } from '../services/api';
 import { QuizPlayer } from './QuizPlayer';
 import { LeaderboardPanel } from './LeaderboardPanel';
+import { VideoEmbedPlayer } from './VideoEmbedPlayer';
 
 interface CourseDetailViewProps {
   enrollmentId: number;
@@ -13,23 +14,16 @@ interface CourseDetailViewProps {
 }
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
-
-function getYouTubeEmbedUrl(url: string): string | null {
-  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{6,})/);
-  return match ? `https://www.youtube.com/embed/${match[1]}` : null;
-}
-
-function getVimeoEmbedUrl(url: string): string | null {
-  const match = url.match(/vimeo\.com\/(\d+)/);
-  return match ? `https://player.vimeo.com/video/${match[1]}` : null;
-}
+const WATCH_THRESHOLD = 0.8;
 
 export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ enrollmentId, onBack }) => {
   const [enrollment, setEnrollment] = useState<EnrollmentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeModuleId, setActiveModuleId] = useState<number | null>(null);
   const [downloadingCertificateNumber, setDownloadingCertificateNumber] = useState<string | null>(null);
+  const [watchedRatio, setWatchedRatio] = useState(0);
   const timeSpentAccumulator = useRef(0);
+  const totalTimeSpentSeconds = useRef(0);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const handleDownloadCertificate = async (certificateNumber: string) => {
@@ -92,13 +86,34 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ enrollmentId
     }
   };
 
-  // Heartbeat timer for video modules
+  // Reset watch tracking when switching modules; seed elapsed time from prior progress (documents resume their ratio)
   useEffect(() => {
-    if (!activeModule || (activeModule.contentType !== 'VIDEO_FILE' && activeModule.contentType !== 'VIDEO_EMBED')) return;
+    if (!activeModule) return;
+    const progress = progressFor(activeModule.id);
+    totalTimeSpentSeconds.current = progress?.timeSpentSeconds ?? 0;
+    if (activeModule.contentType === 'DOCUMENT') {
+      const targetSeconds = (activeModule.durationMinutes ?? 0) * 60;
+      setWatchedRatio(targetSeconds > 0 ? Math.min(1, totalTimeSpentSeconds.current / targetSeconds) : 1);
+    } else {
+      setWatchedRatio(0);
+    }
+  }, [activeModule?.id]);
+
+  // Heartbeat timer for video and document modules
+  useEffect(() => {
+    if (!activeModule || activeModule.contentType === 'QUIZ') return;
     const interval = setInterval(() => {
       timeSpentAccumulator.current += HEARTBEAT_INTERVAL_MS / 1000;
-      const position = videoRef.current?.currentTime;
-      sendHeartbeat(position ? Math.floor(position) : undefined);
+      totalTimeSpentSeconds.current += HEARTBEAT_INTERVAL_MS / 1000;
+      if (activeModule.contentType === 'DOCUMENT') {
+        const targetSeconds = (activeModule.durationMinutes ?? 0) * 60;
+        setWatchedRatio(targetSeconds > 0 ? Math.min(1, totalTimeSpentSeconds.current / targetSeconds) : 1);
+        sendHeartbeat();
+      } else if (activeModule.contentType === 'VIDEO_FILE') {
+        const position = videoRef.current?.currentTime;
+        sendHeartbeat(position ? Math.floor(position) : undefined);
+      }
+      // VIDEO_EMBED progress/heartbeat is driven by VideoEmbedPlayer's onProgress callback instead
     }, HEARTBEAT_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [activeModule?.id]);
@@ -111,7 +126,26 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ enrollmentId
     }
   };
 
+  const handleVideoTimeUpdate = () => {
+    const video = videoRef.current;
+    if (video && video.duration > 0) {
+      setWatchedRatio(Math.min(1, video.currentTime / video.duration));
+    }
+  };
+
+  const lastEmbedHeartbeatAt = useRef(0);
+  const handleEmbedProgress = (ratio: number, currentTimeSeconds: number) => {
+    setWatchedRatio(Math.min(1, ratio));
+    const now = Date.now();
+    if (now - lastEmbedHeartbeatAt.current >= HEARTBEAT_INTERVAL_MS) {
+      lastEmbedHeartbeatAt.current = now;
+      timeSpentAccumulator.current += HEARTBEAT_INTERVAL_MS / 1000;
+      sendHeartbeat(Math.floor(currentTimeSeconds));
+    }
+  };
+
   const handleMarkModuleComplete = () => {
+    if (watchedRatio < WATCH_THRESHOLD) return;
     sendHeartbeat(videoRef.current?.currentTime ? Math.floor(videoRef.current.currentTime) : undefined, undefined, true);
   };
 
@@ -217,19 +251,17 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ enrollmentId
                       src={activeModule.contentUrl || undefined}
                       controls
                       onLoadedMetadata={handleVideoLoaded}
+                      onTimeUpdate={handleVideoTimeUpdate}
                       className="w-full h-full"
                     />
+                  ) : activeModule.contentUrl ? (
+                    <VideoEmbedPlayer
+                      url={activeModule.contentUrl}
+                      initialPositionSeconds={progressFor(activeModule.id)?.lastPositionSeconds}
+                      onProgress={handleEmbedProgress}
+                    />
                   ) : (
-                    (() => {
-                      const embedUrl = activeModule.contentUrl
-                        ? getYouTubeEmbedUrl(activeModule.contentUrl) || getVimeoEmbedUrl(activeModule.contentUrl)
-                        : null;
-                      return embedUrl ? (
-                        <iframe src={embedUrl} className="w-full h-full" allow="autoplay; encrypted-media" allowFullScreen frameBorder="0" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-white text-sm">Unable to load video</div>
-                      );
-                    })()
+                    <div className="w-full h-full flex items-center justify-center text-white text-sm">Unable to load video</div>
                   )}
                 </div>
               )}
@@ -249,12 +281,29 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({ enrollmentId
               )}
 
               {activeModule.contentType !== 'QUIZ' && progressFor(activeModule.id)?.status !== 'COMPLETED' && (
-                <button
-                  onClick={handleMarkModuleComplete}
-                  className="btn-orange px-4 py-2.5 text-xs font-bold rounded-2xl"
-                >
-                  <CheckCircle className="w-4 h-4" /> Mark as Complete
-                </button>
+                <div className="space-y-2">
+                  {watchedRatio < WATCH_THRESHOLD && (
+                    <>
+                      <div className="w-full h-1.5 bg-orange-50 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#f46617] rounded-full transition-all duration-500"
+                          style={{ width: `${Math.round(watchedRatio * 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-semibold">
+                        {activeModule.contentType === 'DOCUMENT' ? 'Spend' : 'Watch'} {Math.round(WATCH_THRESHOLD * 100)}% to unlock — {Math.round(watchedRatio * 100)}% so far
+                      </p>
+                    </>
+                  )}
+                  <button
+                    onClick={handleMarkModuleComplete}
+                    disabled={watchedRatio < WATCH_THRESHOLD}
+                    title={watchedRatio < WATCH_THRESHOLD ? `Watch ${Math.round(WATCH_THRESHOLD * 100)}% to unlock` : undefined}
+                    className="btn-orange px-4 py-2.5 text-xs font-bold rounded-2xl disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <CheckCircle className="w-4 h-4" /> Mark as Complete
+                  </button>
+                </div>
               )}
 
               {progressFor(activeModule.id)?.status === 'COMPLETED' && certificateForModule(activeModule.id) && (

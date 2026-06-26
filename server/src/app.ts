@@ -20,6 +20,7 @@ import iltRouter from './routes/ilt.js';
 import badgeRouter from './routes/badges.js';
 import documentRouter from './routes/documents.js';
 import notificationRouter from './routes/notifications.js';
+import libraryRouter from './routes/library.js';
 
 const app = express();
 
@@ -92,6 +93,7 @@ app.use('/api/ilt', iltRouter);
 app.use('/api/badges', badgeRouter);
 app.use('/api/documents', documentRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/api/library', libraryRouter);
 
 // ─── ERROR HANDLING ──────────────────────────────────────────
 

@@ -7,7 +7,7 @@ import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { NotFoundError, BadRequestError, ForbiddenError, TooManyRequestsError } from '../utils/errors.js';
 import { classifyLink } from '../utils/linkEmbed.js';
-import { notify, getEmployeeUserIdMap, hasReceivedLearningNotificationToday, getManagerAndHrUserIds } from '../utils/notificationService.js';
+import { notify, getEmployeeUserIdMap, hasReceivedLearningNotificationToday, getManagerAndHrUserIds, getAudienceUserIds, notifyEmployeesBulk } from '../utils/notificationService.js';
 import { sendLearningReminderEmail } from '../utils/mailer.js';
 import { resolveGradeLabel, evaluateAttemptBadges, evaluateCourseCompletionBadges, evaluatePathCompletionBadges, evaluateModuleCompletionBadges } from '../utils/badgeService.js';
 
@@ -219,6 +219,21 @@ router.put(
             data: body,
         });
 
+        const enrolledEmployees = await prisma.enrollment.findMany({
+            where: { courseId: id, status: { notIn: ['REJECTED'] } },
+            select: { employeeId: true },
+        });
+        await notifyEmployeesBulk(
+            enrolledEmployees.map((e) => e.employeeId),
+            'COURSE_CONTENT_UPDATED',
+            () => ({
+                title: 'Course updated',
+                message: `"${course.title}" was updated by HR — you may want to review what changed.`,
+                entityId: course.id,
+            }),
+            req.user!.userId
+        );
+
         res.json({ success: true, data: { course }, message: 'Course updated' });
     })
 );
@@ -256,6 +271,16 @@ router.post(
         if (existing.modules.length === 0) throw new BadRequestError('Add at least one module before publishing');
 
         const course = await prisma.course.update({ where: { id }, data: { state: 'PUBLISHED' } });
+
+        const audienceUserIds = await getAudienceUserIds(course.targetDepartment);
+        await notify({
+            recipientIds: audienceUserIds,
+            type: 'COURSE_PUBLISHED',
+            title: 'New course available',
+            message: `"${course.title}" is now available to enroll in.`,
+            entityId: course.id,
+            excludeUserId: req.user!.userId,
+        });
 
         res.json({ success: true, data: { course }, message: 'Course published' });
     })
@@ -475,6 +500,7 @@ const submitAttemptSchema = z.object({
         selectedOptionIds: z.array(z.number().int().positive()),
     })),
     startedAt: z.string(),
+    isAutoSubmit: z.boolean().optional(),
 });
 
 router.post(
@@ -538,6 +564,22 @@ router.post(
         });
 
         await evaluateAttemptBadges(attempt.id);
+
+        if (body.isAutoSubmit) {
+            const [employee, course] = await Promise.all([
+                prisma.employee.findUnique({ where: { id: employeeId }, select: { name: true } }),
+                prisma.course.findUnique({ where: { id: quiz.module.courseId }, select: { title: true } }),
+            ]);
+            const managerAndHrUserIds = await getManagerAndHrUserIds(employeeId);
+            await notify({
+                recipientIds: managerAndHrUserIds,
+                type: 'QUIZ_AUTO_SUBMITTED',
+                title: 'Quiz auto-submitted — tab switch detected',
+                message: `${employee?.name ?? 'A team member'} switched away from the quiz tab during "${course?.title ?? 'a course'}" and the attempt was auto-submitted (score: ${score}%, ${passed ? 'passed' : 'not passed'}).`,
+                entityId: quiz.module.courseId,
+                employeeId,
+            });
+        }
 
         // Find the enrollment this quiz module belongs to, mark module progress + re-evaluate completion
         const enrollment = await prisma.enrollment.findFirst({
@@ -1220,6 +1262,17 @@ async function evaluateCourseCompletion(enrollmentId: number): Promise<void> {
 
     const { issueCertificate } = await import('../utils/certificateGenerator.js');
     await issueCertificate(enrollmentId);
+
+    const employee = await prisma.employee.findUnique({ where: { id: enrollment.employeeId }, select: { name: true } });
+    const managerAndHrUserIds = await getManagerAndHrUserIds(enrollment.employeeId);
+    await notify({
+        recipientIds: managerAndHrUserIds,
+        type: 'COURSE_COMPLETED',
+        title: 'Course completed',
+        message: `${employee?.name ?? 'A team member'} completed "${enrollment.course.title}".`,
+        entityId: enrollment.courseId,
+        employeeId: enrollment.employeeId,
+    });
 
     await evaluateCourseCompletionBadges(enrollment.employeeId);
     await evaluatePathProgress(enrollment.employeeId, enrollment.courseId);

@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, HelpCircle, Plus, Trash2, Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
-import { learningApi } from '../services/api';
+import { learningApi, type CourseQuiz } from '../services/api';
 
 interface QuizBuilderProps {
   moduleId: number;
   moduleTitle: string;
+  existingQuiz?: CourseQuiz;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (quiz: CourseQuiz) => void;
 }
 
 interface DraftOption {
@@ -35,12 +37,22 @@ const defaultGradeBands = (): DraftGradeBand[] => [
   { label: 'Satisfactory', minScore: '60' },
 ];
 
-export const QuizBuilder: React.FC<QuizBuilderProps> = ({ moduleId, moduleTitle, onClose, onSaved }) => {
-  const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion()]);
-  const [passPercentage, setPassPercentage] = useState(70);
-  const [maxAttempts, setMaxAttempts] = useState(3);
-  const [useGradeBands, setUseGradeBands] = useState(false);
-  const [gradeBands, setGradeBands] = useState<DraftGradeBand[]>(defaultGradeBands());
+const toDraftQuestions = (quiz: CourseQuiz): DraftQuestion[] =>
+  quiz.questions.map(q => ({
+    questionText: q.questionText,
+    options: q.options.map(o => ({ optionText: o.optionText, isCorrect: !!o.isCorrect })),
+  }));
+
+const toDraftGradeBands = (quiz: CourseQuiz): DraftGradeBand[] =>
+  (quiz.gradeBands ?? []).map(g => ({ label: g.label, minScore: String(g.minScore) }));
+
+export const QuizBuilder: React.FC<QuizBuilderProps> = ({ moduleId, moduleTitle, existingQuiz, onClose, onSaved }) => {
+  const isEditing = !!existingQuiz;
+  const [questions, setQuestions] = useState<DraftQuestion[]>(existingQuiz ? toDraftQuestions(existingQuiz) : [emptyQuestion()]);
+  const [passPercentage, setPassPercentage] = useState(existingQuiz?.passPercentage ?? 70);
+  const [maxAttempts, setMaxAttempts] = useState(existingQuiz?.maxAttempts ?? 3);
+  const [useGradeBands, setUseGradeBands] = useState(!!existingQuiz?.gradeBands?.length);
+  const [gradeBands, setGradeBands] = useState<DraftGradeBand[]>(existingQuiz?.gradeBands?.length ? toDraftGradeBands(existingQuiz) : defaultGradeBands());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -121,14 +133,14 @@ export const QuizBuilder: React.FC<QuizBuilderProps> = ({ moduleId, moduleTitle,
       gradeBands: parsedGradeBands,
     };
     try {
-      await learningApi.saveQuiz(moduleId, payload);
-      onSaved();
+      const res = await learningApi.saveQuiz(moduleId, payload);
+      if (res.data?.quiz) onSaved(res.data.quiz);
     } catch (err: any) {
       const message = err.message || 'Failed to save quiz';
       if (message.includes('force=true') && window.confirm(`${message}\n\nProceed anyway?`)) {
         try {
-          await learningApi.saveQuiz(moduleId, payload, true);
-          onSaved();
+          const res2 = await learningApi.saveQuiz(moduleId, payload, true);
+          if (res2.data?.quiz) onSaved(res2.data.quiz);
         } catch (err2: any) {
           setError(err2.message || 'Failed to save quiz');
         }
@@ -140,15 +152,15 @@ export const QuizBuilder: React.FC<QuizBuilderProps> = ({ moduleId, moduleTitle,
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
+  return createPortal(
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!submitting) onClose(); }} />
 
       <div className="relative bg-white rounded-[32px] border border-orange-100/50 shadow-2xl w-full max-w-2xl overflow-hidden animate-scale-in max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-orange-100/50 flex-shrink-0">
           <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
             <HelpCircle className="w-5 h-5 text-[#f46617]" />
-            Quiz — {moduleTitle}
+            {isEditing ? 'Edit Quiz' : 'Quiz'} — {moduleTitle}
           </h3>
           <button disabled={submitting} onClick={onClose} className="p-1.5 rounded-xl hover:bg-orange-50 text-slate-400 hover:text-slate-600 transition-colors">
             <X className="w-5 h-5" />
@@ -305,10 +317,11 @@ export const QuizBuilder: React.FC<QuizBuilderProps> = ({ moduleId, moduleTitle,
             className="w-full btn-orange px-4 py-3 text-sm font-bold rounded-2xl flex items-center justify-center gap-2"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-            Save Quiz
+            {isEditing ? 'Update Quiz' : 'Save Quiz'}
           </button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

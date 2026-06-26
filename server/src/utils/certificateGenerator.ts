@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../config/db.js';
+import { notify, getEmployeeUserId } from './notificationService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Same PNG used as the app's header logo (frontend/src/images/autoform-logo.png) — kept in sync
@@ -155,6 +156,18 @@ export async function issueCertificate(enrollmentId: number): Promise<void> {
     await prisma.certificate.create({
         data: { enrollmentId, moduleId: null, certificateNumber, pdfBase64, expiresAt },
     });
+
+    const recipientUserId = await getEmployeeUserId(enrollment.employeeId);
+    if (recipientUserId) {
+        await notify({
+            recipientIds: [recipientUserId],
+            type: 'CERTIFICATE_ISSUED',
+            title: 'Certificate ready',
+            message: `Your certificate for "${enrollment.course.title}" is ready to download.`,
+            entityId: enrollment.courseId,
+            employeeId: enrollment.employeeId,
+        });
+    }
 }
 
 /** Issues a per-module certificate. Only called when the course has certificatesPerModule
@@ -195,4 +208,16 @@ export async function issueModuleCertificate(enrollmentId: number, moduleId: num
     await prisma.certificate.create({
         data: { enrollmentId, moduleId, certificateNumber, pdfBase64 },
     });
+
+    const recipientUserId = await getEmployeeUserId(enrollment.employeeId);
+    if (recipientUserId) {
+        await notify({
+            recipientIds: [recipientUserId],
+            type: 'CERTIFICATE_ISSUED',
+            title: 'Certificate ready',
+            message: `Your certificate for "${module.title}" (${enrollment.course.title}) is ready to download.`,
+            entityId: enrollment.courseId,
+            employeeId: enrollment.employeeId,
+        });
+    }
 }
