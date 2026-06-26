@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import path from 'node:path';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRouter from './routes/auth.js';
@@ -11,8 +12,14 @@ import leaveRouter from './routes/leaves.js';
 import attendanceRouter from './routes/attendance.js';
 import salaryRouter from './routes/salary.js';
 import announcementRouter from './routes/announcements.js';
+import heroBannerRouter from './routes/heroBanners.js';
 import performanceRouter from './routes/performance.js';
 import holidayRouter from './routes/holidays.js';
+import learningRouter from './routes/learning.js';
+import iltRouter from './routes/ilt.js';
+import badgeRouter from './routes/badges.js';
+import documentRouter from './routes/documents.js';
+import notificationRouter from './routes/notifications.js';
 
 const app = express();
 
@@ -24,7 +31,11 @@ const app = express();
 // - X-XSS-Protection
 // - Strict-Transport-Security
 // - And more...
-app.use(helmet());
+app.use(
+    helmet({
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+    })
+);
 
 // CORS: only allow requests from our frontend
 app.use(
@@ -52,6 +63,7 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
 // ─── HEALTH CHECK ────────────────────────────────────────────
 
@@ -72,8 +84,14 @@ app.use('/api/leaves', leaveRouter);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/salary', salaryRouter);
 app.use('/api/announcements', announcementRouter);
+app.use('/api/hero-banners', heroBannerRouter);
 app.use('/api/performance', performanceRouter);
 app.use('/api/holidays', holidayRouter);
+app.use('/api/learning', learningRouter);
+app.use('/api/ilt', iltRouter);
+app.use('/api/badges', badgeRouter);
+app.use('/api/documents', documentRouter);
+app.use('/api/notifications', notificationRouter);
 
 // ─── ERROR HANDLING ──────────────────────────────────────────
 

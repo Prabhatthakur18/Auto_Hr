@@ -14,6 +14,7 @@ import {
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { BadRequestError } from '../utils/errors.js';
+import { notify, getManagerAndHrUserIds } from '../utils/notificationService.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -27,8 +28,31 @@ const manualEntrySchema = z.object({
     date: z.string().min(1),
     checkIn: z.string().optional(),
     checkOut: z.string().optional(),
-    status: z.enum(['PRESENT', 'ABSENT', 'HALF_DAY', 'ON_LEAVE', 'HOLIDAY']).optional(),
+    status: z.enum(['PRESENT', 'ABSENT', 'HALF_DAY', 'ON_LEAVE', 'HOLIDAY', 'WFH', 'ON_DUTY', 'CLIENT_VISIT', 'BUSINESS_TRAVEL']).optional(),
 });
+
+const selfCorrectionSchema = z.object({
+    employeeId: z.number().int().positive(),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    status: z.enum(['PRESENT', 'ABSENT', 'HALF_DAY', 'WFH', 'ON_DUTY', 'CLIENT_VISIT', 'BUSINESS_TRAVEL']),
+    checkIn: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional().nullable(),
+    checkOut: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional().nullable(),
+    reason: z.string().trim().min(3, 'Reason is required').max(1000),
+});
+
+function calculateWorkingHours(checkIn?: string | null, checkOut?: string | null): string | null {
+    if (!checkIn || !checkOut) return null;
+    const toSeconds = (value: string) => {
+        const [hours = 0, minutes = 0, seconds = 0] = value.split(':').map(Number);
+        return hours * 3600 + minutes * 60 + seconds;
+    };
+    const difference = toSeconds(checkOut) - toSeconds(checkIn);
+    if (!Number.isFinite(difference) || difference < 0) return null;
+    const hours = Math.floor(difference / 3600);
+    const minutes = Math.floor((difference % 3600) / 60);
+    const seconds = difference % 60;
+    return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
+}
 
 
 // ─── Biometric file parsing (ported from Python) ─────────────
@@ -427,7 +451,7 @@ router.get(
 
         const summary = {
             total: mergedRecords.length,
-            present: mergedRecords.filter((r) => r.status === 'PRESENT').length,
+            present: mergedRecords.filter((r) => ['PRESENT', 'WFH', 'ON_DUTY', 'CLIENT_VISIT', 'BUSINESS_TRAVEL'].includes(r.status)).length,
             absent: mergedRecords.filter((r) => r.status === 'ABSENT').length,
             halfDay: mergedRecords.filter((r) => r.status === 'HALF_DAY').length,
             onLeave: mergedRecords.filter((r) => r.status === 'ON_LEAVE').length,
@@ -644,6 +668,99 @@ router.post(
 
 // ─── POST /api/attendance/manual ─────────────────────────────
 // Manual attendance entry (HR only)
+
+router.post(
+    '/self-correction',
+    validate(selfCorrectionSchema),
+    asyncHandler(async (req, res) => {
+        const data = req.body as z.infer<typeof selfCorrectionSchema>;
+        if (req.user!.employeeId !== data.employeeId) {
+            throw new BadRequestError('You can only correct your own attendance');
+        }
+
+        const date = new Date(`${data.date}T00:00:00.000Z`);
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        if (date > today) throw new BadRequestError('Future attendance cannot be edited');
+
+        const [holiday, approvedLeave, employee, recipientIds, existing] = await Promise.all([
+            prisma.holiday.findUnique({ where: { date } }),
+            prisma.leave.findFirst({
+                where: { employeeId: data.employeeId, status: 'APPROVED', startDate: { lte: date }, endDate: { gte: date } },
+            }),
+            prisma.employee.findUnique({ where: { id: data.employeeId } }),
+            getManagerAndHrUserIds(data.employeeId),
+            prisma.attendance.findUnique({ where: { employeeId_date: { employeeId: data.employeeId, date } } }),
+        ]);
+
+        if (!employee) throw new BadRequestError('Employee profile not found');
+        if (holiday) throw new BadRequestError('Holiday attendance cannot be corrected');
+        if (approvedLeave) throw new BadRequestError('Approved leave attendance cannot be overwritten');
+
+        const checkIn = data.checkIn?.trim() || null;
+        const checkOut = data.checkOut?.trim() || null;
+        const workingHours = calculateWorkingHours(checkIn, checkOut);
+        if (checkIn && checkOut && !workingHours) {
+            throw new BadRequestError('Check-out time must be after check-in time');
+        }
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+        const attendance = await prisma.$transaction(async tx => {
+            const saved = await tx.attendance.upsert({
+                where: { employeeId_date: { employeeId: data.employeeId, date } },
+                update: {
+                    status: data.status,
+                    checkIn,
+                    checkOut,
+                    totalWorkingHours: workingHours,
+                    isLate: false,
+                    lateBy: null,
+                    overtime: false,
+                    otTime: null,
+                },
+                create: {
+                    employeeId: data.employeeId,
+                    date,
+                    day: days[date.getUTCDay()] || '',
+                    status: data.status,
+                    checkIn,
+                    checkOut,
+                    totalWorkingHours: workingHours,
+                },
+            });
+
+            await tx.attendanceCorrection.create({
+                data: {
+                    attendanceId: saved.id,
+                    employeeId: data.employeeId,
+                    editedById: req.user!.userId,
+                    date,
+                    previousStatus: existing?.status || 'ABSENT',
+                    newStatus: data.status,
+                    previousCheckIn: existing?.checkIn,
+                    newCheckIn: checkIn,
+                    previousCheckOut: existing?.checkOut,
+                    newCheckOut: checkOut,
+                    reason: data.reason,
+                },
+            });
+
+            return saved;
+        });
+
+        await notify({
+            recipientIds,
+            excludeUserId: req.user!.userId,
+            type: 'ATTENDANCE_CORRECTION',
+            title: `${employee.name} updated attendance`,
+            message: `${data.date}: ${data.status.replaceAll('_', ' ')}. Reason: ${data.reason}`,
+            entityId: attendance.id,
+            employeeId: data.employeeId,
+        });
+
+        res.json({ success: true, data: { attendance }, message: 'Attendance updated and managers/HR notified' });
+    })
+);
 
 router.post(
     '/manual',

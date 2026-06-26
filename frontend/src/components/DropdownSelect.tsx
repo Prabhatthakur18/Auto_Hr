@@ -13,7 +13,7 @@ interface DropdownSelectProps {
   options: DropdownOption[];
   placeholder: string;
   disabled?: boolean;
-  variant?: 'form' | 'filter';
+  variant?: 'form' | 'filter' | 'filterCompact';
   className?: string;
   leadingIcon?: React.ReactNode;
 }
@@ -68,6 +68,8 @@ export const DropdownSelect: React.FC<DropdownSelectProps> = ({
   const buttonBase =
     variant === 'filter'
       ? 'min-h-[48px] rounded-[26px] border border-orange-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-800 shadow-sm hover:border-brand-orange/40 hover:shadow-md hover:shadow-orange-200/20'
+      : variant === 'filterCompact'
+      ? 'min-h-[44px] rounded-2xl border border-orange-200 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-sm hover:border-brand-orange/40 hover:shadow-md hover:shadow-orange-200/20'
       : 'min-h-[48px] rounded-xl border border-orange-100 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm hover:border-brand-orange/40';
 
   const buttonState = disabled
@@ -77,6 +79,8 @@ export const DropdownSelect: React.FC<DropdownSelectProps> = ({
   const menuBase =
     variant === 'filter'
       ? 'mt-2 rounded-[22px] border border-orange-200 bg-white shadow-2xl shadow-orange-200/20'
+      : variant === 'filterCompact'
+      ? 'mt-2 rounded-2xl border border-orange-200 bg-white shadow-2xl shadow-orange-200/20'
       : 'mt-2 rounded-2xl border border-orange-100 bg-white shadow-2xl shadow-orange-200/20';
 
   const itemBase =

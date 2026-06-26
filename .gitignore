@@ -23,3 +23,15 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Generated TypeScript build cache
+*.tsbuildinfo
+
+# Local uploads and runtime files
+server/uploads/
+
+# Local payroll/sample data and archives
+Pay Sheet.*
+*.rar
+010000/
+config.json

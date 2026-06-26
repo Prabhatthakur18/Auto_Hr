@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Construction } from 'lucide-react';
-import logoImg from '../images/autologo-removebg-preview.png';
+import logoImg from '../images/autoform-logo.png';
 
 const Admin: React.FC = () => {
   const navigate = useNavigate();
@@ -17,10 +17,10 @@ const Admin: React.FC = () => {
           <img 
             src={logoImg} 
             alt="Autoform India" 
-            className="h-16 mx-auto mb-2 drop-shadow-sm select-none"
+            className="w-64 h-auto mx-auto mb-2 drop-shadow-sm select-none"
             draggable={false}
           />
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight leading-none">Auto HR</h1>
+          <h1 className="text-4xl font-script text-slate-800 leading-none">Autoform Connect</h1>
           <p className="text-slate-500 font-semibold text-xs tracking-wider uppercase mt-1.5 opacity-80">Autoform India HR Portal</p>
         </div>
 

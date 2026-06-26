@@ -7,6 +7,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -85,8 +86,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoggedIn(false);
   };
 
+  const refreshUser = async () => {
+    try {
+      const response = await authApi.me();
+      if (response.data?.user) {
+        setUser(response.data.user);
+      }
+    } catch (err) {
+      console.error('Failed to refresh user auth state:', err);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoggedIn, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

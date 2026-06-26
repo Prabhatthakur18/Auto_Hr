@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Loader2, KeyRound } from 'lucide-react';
-import logoImg from '../images/autologo-removebg-preview.png';
+import logoImg from '../images/autoform-logo.png';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 interface LoginFormProps {
   onLoginSuccess?: () => void;
@@ -13,6 +14,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,11 +47,11 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
           <img 
             src={logoImg} 
             alt="Autoform India" 
-            className="h-16 mx-auto mb-2 drop-shadow-sm select-none"
+            className="w-64 h-auto mx-auto mb-2 drop-shadow-sm select-none"
             draggable={false}
           />
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight leading-none">Auto HR</h1>
-          <p className="text-slate-500 font-semibold text-xs tracking-wider uppercase mt-1.5 opacity-80">Autoform India HR Portal</p>
+          <h1 className="text-4xl font-script text-slate-800 leading-none">Autoform Connect</h1>
+          {/* <p className="text-slate-500 font-semibold text-xs tracking-wider uppercase mt-1.5 opacity-80">Autoform India HR Portal</p> */}
         </div>
 
         {/* Login Card */}
@@ -72,9 +74,18 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-[11px] font-bold text-[#f46617] hover:text-[#d85512] transition-colors"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <input
                 type="password"
                 value={password}
@@ -116,6 +127,10 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
           Secure Login Verification System
         </p>
       </div>
+
+      {showForgotPassword && (
+        <ForgotPasswordModal onClose={() => setShowForgotPassword(false)} />
+      )}
     </div>
   );
 };

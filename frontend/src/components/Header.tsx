@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { UserCog, LogOut, Shield, Building, User } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import logo from "../images/autologo-removebg-preview.png";
+import logo from "../images/autoform-logo.png";
 
 const Header: React.FC = () => {
   const navigate = useNavigate();
@@ -24,7 +24,7 @@ const Header: React.FC = () => {
     switch (user.role) {
       case 'HR':
         return <Shield className="w-4 h-4 text-blue-600" />;
-      case 'MANAGEMENT':
+      case 'MANAGER':
         return <Building className="w-4 h-4 text-green-600" />;
       case 'EMPLOYEE':
         return <User className="w-4 h-4 text-purple-600" />;

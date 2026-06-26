@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
 import prisma from '../config/db.js';
 import { masterEmployees } from '../data/employeeMaster.js';
 import {
@@ -15,8 +16,10 @@ import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { NotFoundError, ForbiddenError, BadRequestError, ConflictError } from '../utils/errors.js';
 import { hashPassword } from '../utils/password.js';
+import { storeAvatarFile } from '../utils/avatarStorage.js';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1 * 1024 * 1024 } });
 
 // All employee routes require authentication + data scoping
 router.use(authenticate, scopeData);
@@ -51,6 +54,16 @@ const createEmployeeSchema = z.object({
     education: z.string().max(255).optional(),
     employeeType: z.string().max(50).optional(),
     tallyLedgerName: z.string().max(200).optional().nullable(),
+    employeeNumber: z.string().max(50).optional().nullable(),
+    panNumber: z.string().max(20).optional().nullable(),
+    uanNumber: z.string().max(20).optional().nullable(),
+    pfAccountNumber: z.string().max(50).optional().nullable(),
+    esiNumber: z.string().max(50).optional().nullable(),
+    pranNumber: z.string().max(50).optional().nullable(),
+    taxRegime: z.string().max(50).optional().nullable(),
+    bankAccountNumber: z.string().max(50).optional().nullable(),
+    bankIfscCode: z.string().max(20).optional().nullable(),
+    bankBranch: z.string().max(100).optional().nullable(),
 
     // Optional: create a user account for this employee
     createUser: z.boolean().optional(),
@@ -558,6 +571,56 @@ router.put(
             }
         }
 
+        // Handle user account creation / updating
+        if (createUser && username) {
+            const existingEmployeeUser = await prisma.user.findUnique({
+                where: { employeeId: id },
+            });
+
+            if (existingEmployeeUser) {
+                if (existingEmployeeUser.username !== username || password) {
+                    throw new ForbiddenError('Only the account owner can change username or password');
+                }
+
+                const dataToUpdate = {
+                    role: role || undefined,
+                    isActive: true,
+                };
+
+                await prisma.user.update({
+                    where: { id: existingEmployeeUser.id },
+                    data: dataToUpdate,
+                });
+            } else {
+                if (!password) {
+                    throw new BadRequestError('Password is required to create a new user account');
+                }
+
+                const taken = await prisma.user.findUnique({ where: { username } });
+                if (taken) throw new ConflictError('Username is already taken');
+
+                const passwordHash = await hashPassword(password);
+                await prisma.user.create({
+                    data: {
+                        username,
+                        passwordHash,
+                        role: role || 'EMPLOYEE',
+                        employeeId: id,
+                    },
+                });
+            }
+        } else if (role && !createUser) {
+            const existingEmployeeUser = await prisma.user.findUnique({
+                where: { employeeId: id },
+            });
+            if (existingEmployeeUser) {
+                await prisma.user.update({
+                    where: { id: existingEmployeeUser.id },
+                    data: { role },
+                });
+            }
+        }
+
         res.json({
             success: true,
             data: { employee },
@@ -566,7 +629,140 @@ router.put(
     })
 );
 
+// ─── PUT /api/employees/:id/payroll-details ──────────────────
+// Self-service statutory/payroll fields — editable by HR OR the employee
+// themselves (their own record only). None of these fields are mandatory.
+
+const payrollDetailsSchema = z.object({
+    employeeNumber: z.string().max(50).optional().nullable(),
+    panNumber: z.string().max(20).optional().nullable(),
+    uanNumber: z.string().max(20).optional().nullable(),
+    pfAccountNumber: z.string().max(50).optional().nullable(),
+    esiNumber: z.string().max(50).optional().nullable(),
+    pranNumber: z.string().max(50).optional().nullable(),
+    taxRegime: z.string().max(50).optional().nullable(),
+    bankAccountNumber: z.string().max(50).optional().nullable(),
+    bankIfscCode: z.string().max(20).optional().nullable(),
+    bankBranch: z.string().max(100).optional().nullable(),
+});
+
+const profileDetailsSchema = z.object({
+    bio: z.string().max(5000).nullable(),
+    skills: z.array(z.string().trim().min(1).max(100)).max(50),
+    education: z.string().max(1000).nullable(),
+    experience: z.string().max(5000).nullable(),
+});
+
+router.put(
+    '/:id/profile-details',
+    validate(profileDetailsSchema),
+    asyncHandler(async (req, res) => {
+        const id = parseInt(req.params['id'] as string, 10);
+        if (isNaN(id)) throw new BadRequestError('Invalid employee ID');
+
+        const isSelf = req.user!.employeeId === id;
+        const isHR = req.user!.role === 'HR';
+        if (!isSelf && !isHR) {
+            throw new ForbiddenError('You can only update your own profile details');
+        }
+
+        const data = req.body as z.infer<typeof profileDetailsSchema>;
+        const employee = await prisma.employee.update({
+            where: { id },
+            data: {
+                bio: data.bio?.trim() || null,
+                skills: JSON.stringify(data.skills),
+                education: data.education?.trim() || null,
+                experience: data.experience?.trim() || null,
+            },
+            select: { id: true, bio: true, skills: true, education: true, experience: true },
+        });
+
+        res.json({ success: true, data: { employee }, message: 'Profile details updated' });
+    })
+);
+
+router.put(
+    '/:id/payroll-details',
+    validate(payrollDetailsSchema),
+    asyncHandler(async (req, res) => {
+        const id = parseInt(req.params['id'] as string, 10);
+        if (isNaN(id)) throw new BadRequestError('Invalid employee ID');
+
+        const isSelf = req.user!.employeeId === id;
+        const isHR = req.user!.role === 'HR';
+        if (!isSelf && !isHR) {
+            throw new ForbiddenError('You can only update your own payroll details');
+        }
+
+        const existing = await prisma.employee.findUnique({ where: { id } });
+        if (!existing) throw new NotFoundError('Employee not found');
+
+        const data = req.body as z.infer<typeof payrollDetailsSchema>;
+
+        const employee = await prisma.employee.update({
+            where: { id },
+            data,
+            select: {
+                id: true,
+                employeeNumber: true,
+                panNumber: true,
+                uanNumber: true,
+                pfAccountNumber: true,
+                esiNumber: true,
+                pranNumber: true,
+                taxRegime: true,
+                bankAccountNumber: true,
+                bankIfscCode: true,
+                bankBranch: true,
+            },
+        });
+
+        res.json({
+            success: true,
+            data: { employee },
+            message: 'Payroll details updated',
+        });
+    })
+);
+
 // ─── DELETE /api/employees/:id ───────────────────────────────
+router.post(
+    '/:id/avatar',
+    authorize('HR'),
+    upload.single('avatar'),
+    asyncHandler(async (req, res) => {
+        const id = parseInt(req.params['id'] as string, 10);
+        if (isNaN(id)) throw new BadRequestError('Invalid employee ID');
+
+        const existing = await prisma.employee.findUnique({
+            where: { id },
+            select: { id: true, isActive: true },
+        });
+        if (!existing || !existing.isActive) {
+            throw new NotFoundError('Employee not found');
+        }
+
+        if (!req.file) {
+            throw new BadRequestError('No avatar image uploaded');
+        }
+
+        const avatar = await storeAvatarFile(req.file, `employee-${id}`);
+
+        const employee = await prisma.employee.update({
+            where: { id },
+            data: { avatar },
+            select: { id: true, avatar: true },
+        });
+
+        res.json({
+            success: true,
+            data: { avatar: employee.avatar },
+            message: 'Employee photo updated successfully',
+        });
+    })
+);
+
 // Soft-delete employee (HR only)
 
 router.delete(

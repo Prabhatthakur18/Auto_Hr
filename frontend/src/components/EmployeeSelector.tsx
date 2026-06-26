@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Employee } from '../types';
+import { type Employee } from '../services/api';
 import { Users, ChevronDown, Eye } from 'lucide-react';
+import { resolveAssetUrl } from '../utils/assetUrl';
 
 interface EmployeeSelectorProps {
   employees: Employee[];
@@ -77,7 +78,7 @@ const EmployeeSelector: React.FC<EmployeeSelectorProps> = ({
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex items-start space-x-4">
               <img
-                src={selectedEmployee.avatar}
+                src={resolveAssetUrl(selectedEmployee.avatar)}
                 alt={selectedEmployee.name}
                 className="w-16 h-16 rounded-full object-cover"
               />

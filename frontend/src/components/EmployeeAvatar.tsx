@@ -1,4 +1,5 @@
 import React from 'react';
+import { resolveAssetUrl } from '../utils/assetUrl';
 
 interface EmployeeAvatarProps {
   name: string;
@@ -108,12 +109,13 @@ export const EmployeeAvatar: React.FC<EmployeeAvatarProps> = ({
   shape = 'rounded',
 }) => {
   const shapeClass = shape === 'circle' ? 'rounded-full' : 'rounded-2xl';
+  const avatarSrc = resolveAssetUrl(avatar);
 
   // 1) Real uploaded avatar image
-  if (avatar) {
+  if (avatarSrc) {
     return (
       <img
-        src={avatar}
+        src={avatarSrc}
         alt={name}
         className={`${size} ${shapeClass} object-cover flex-shrink-0 shadow-md ${className}`}
       />

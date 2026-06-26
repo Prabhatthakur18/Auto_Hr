@@ -13,6 +13,7 @@ import {
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { NotFoundError, ForbiddenError, BadRequestError } from '../utils/errors.js';
+import { notify, getManagerAndHrUserIds, getEmployeeUserId } from '../utils/notificationService.js';
 
 const router = Router();
 
@@ -153,7 +154,27 @@ router.post(
                 status: isSelfApprovingRole ? 'APPROVED' : 'PENDING',
                 approvedById: isSelfApprovingRole ? req.user.userId : null,
             },
+            include: { employee: { select: { name: true } } },
         });
+
+        if (!isSelfApprovingRole) {
+            const explicitApprovers = approverIds
+                ? approverIds.split(',').filter(Boolean).map(Number).filter(Number.isFinite)
+                : [];
+            const recipientIds = explicitApprovers.length > 0
+                ? explicitApprovers
+                : await getManagerAndHrUserIds(req.user.employeeId);
+
+            await notify({
+                recipientIds,
+                excludeUserId: req.user.userId,
+                type: 'LEAVE_APPLIED',
+                title: `${leave.employee.name} applied for leave`,
+                message: `${leave.type} leave from ${startDate} to ${endDate} (${days} day${days > 1 ? 's' : ''})${reason ? `. Reason: ${reason}` : ''}`,
+                entityId: leave.id,
+                employeeId: req.user.employeeId,
+            });
+        }
 
         res.status(201).json({
             success: true,
@@ -201,6 +222,19 @@ router.put(
             },
         });
 
+        const employeeUserId = await getEmployeeUserId(leave.employeeId);
+        if (employeeUserId) {
+            await notify({
+                recipientIds: [employeeUserId],
+                excludeUserId: req.user!.userId,
+                type: 'LEAVE_APPROVED',
+                title: 'Your leave was approved',
+                message: `${leave.type} leave from ${leave.startDate.toISOString().split('T')[0]} to ${leave.endDate.toISOString().split('T')[0]} was approved.${reason ? ` Note: ${reason}` : ''}`,
+                entityId: leave.id,
+                employeeId: leave.employeeId,
+            });
+        }
+
         res.json({
             success: true,
             data: { leave: updated },
@@ -246,6 +280,19 @@ router.put(
                 comment: reason || null,
             },
         });
+
+        const employeeUserId = await getEmployeeUserId(leave.employeeId);
+        if (employeeUserId) {
+            await notify({
+                recipientIds: [employeeUserId],
+                excludeUserId: req.user!.userId,
+                type: 'LEAVE_REJECTED',
+                title: 'Your leave was rejected',
+                message: `${leave.type} leave from ${leave.startDate.toISOString().split('T')[0]} to ${leave.endDate.toISOString().split('T')[0]} was rejected.${reason ? ` Reason: ${reason}` : ''}`,
+                entityId: leave.id,
+                employeeId: leave.employeeId,
+            });
+        }
 
         res.json({
             success: true,

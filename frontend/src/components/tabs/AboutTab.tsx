@@ -1,9 +1,10 @@
 import React from 'react';
-import { Employee } from '../../types';
-import { Mail, Phone, Calendar, Award } from 'lucide-react';
+import { type Employee } from '../../services/api';
+import { Mail, Phone, Calendar } from 'lucide-react';
+import { resolveAssetUrl } from '../../utils/assetUrl';
 
 interface AboutTabProps {
-  employee: Employee;
+  employee: Employee & { about: { bio: string; experience: string; skills: string[] } };
 }
 
 const AboutTab: React.FC<AboutTabProps> = ({ employee }) => {
@@ -11,7 +12,7 @@ const AboutTab: React.FC<AboutTabProps> = ({ employee }) => {
     <div className="p-6 space-y-6">
       <div className="flex items-start space-x-6">
         <img
-          src={employee.avatar}
+          src={resolveAssetUrl(employee.avatar)}
           alt={employee.name}
           className="w-24 h-24 rounded-full object-cover"
         />
@@ -55,7 +56,7 @@ const AboutTab: React.FC<AboutTabProps> = ({ employee }) => {
       <div className="bg-gray-50 rounded-lg p-4">
         <h3 className="font-semibold text-gray-900 mb-3">Skills</h3>
         <div className="flex flex-wrap gap-2">
-          {employee.about.skills.map((skill, index) => (
+          {employee.about.skills.map((skill: string, index: number) => (
             <span
               key={index}
               className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full"

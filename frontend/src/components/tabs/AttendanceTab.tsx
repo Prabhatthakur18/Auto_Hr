@@ -8,8 +8,7 @@ interface AttendanceTabProps {
   theme?: 'dark' | 'light';
 }
 
-export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, theme = 'dark' }) => {
-  const isLight = theme === 'light';
+export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, theme: _theme = 'dark' }) => {
   const [targetMonth, setTargetMonth] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -296,7 +295,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, 
                     <td className="py-4 px-6 min-w-[80px]">
                       <span
                         className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border inline-block whitespace-nowrap ${
-                          record.status === 'PRESENT'
+                          ['PRESENT', 'WFH', 'ON_DUTY', 'CLIENT_VISIT', 'BUSINESS_TRAVEL'].includes(record.status)
                             ? 'bg-emerald-50 text-emerald-600 border-emerald-150'
                             : record.status === 'ABSENT'
                             ? 'bg-red-50 text-red-650 border-red-150'
@@ -311,7 +310,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ employeeId, isHR, 
                           ? `HOLIDAY (${record.holidayName})`
                           : record.status === 'ON_LEAVE' && record.leaveType
                           ? `LEAVE (${record.leaveType})`
-                          : record.status}
+                          : record.status.replace(/_/g, ' ')}
                       </span>
                     </td>
                   </tr>

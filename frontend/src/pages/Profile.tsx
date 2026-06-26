@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, Mail, Phone, Calendar, Building2, Users,
-  Loader2, AlertCircle, Briefcase, GraduationCap, Sparkles
+  Loader2, AlertCircle, Briefcase, GraduationCap, Sparkles, Camera,
+  Shield, CheckCircle, AlertTriangle, Send
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
   employeeApi,
   leaveApi,
+  authApi,
   type EmployeeDetail,
   type EmployeeMutationPayload,
   type Leave,
@@ -18,8 +20,12 @@ import { type Kra, type PerformanceSummary } from '../types';
 import PerformanceTab from '../components/tabs/PerformanceTab';
 import LeavesTab from '../components/tabs/LeavesTab';
 import { AttendanceTab } from '../components/tabs/AttendanceTab';
+import { EmployeeDocumentsTab } from '../components/tabs/EmployeeDocumentsTab';
 import SalaryTab from '../components/tabs/SalaryTab';
 import { EmployeeAvatar } from '../components/EmployeeAvatar';
+import { AvatarUploadPicker } from '../components/AvatarUploadPicker';
+import { compressAvatarImage } from '../utils/imageCompression';
+import { PayrollDetailsCard } from '../components/PayrollDetailsCard';
 
 const getRoleBadgeClasses = (role: UserRole) => (
   role === 'HR'
@@ -60,7 +66,7 @@ const ScoreDisplay: React.FC<{ score: number | null }> = ({ score }) => {
 
 // ─── Profile Page ────────────────────────────────────────────
 
-type Tab = 'about' | 'performance' | 'leaves' | 'attendance' | 'salary';
+type Tab = 'about' | 'performance' | 'leaves' | 'attendance' | 'documents' | 'salary' | 'account';
 
 export const ProfileView: React.FC<{
   employeeId: number;
@@ -68,9 +74,10 @@ export const ProfileView: React.FC<{
   onBack?: () => void;
   onOpenEmployee?: (employeeId: number) => void;
   theme?: 'dark' | 'light';
-}> = ({ employeeId, initialTab = 'about', onBack, onOpenEmployee }) => {
+  hideBack?: boolean;
+}> = ({ employeeId, initialTab = 'about', onBack, onOpenEmployee, hideBack = false }) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [employee, setEmployee] = useState<EmployeeDetail | null>(null);
   const [leaves, setLeaves] = useState<Leave[]>([]);
@@ -80,6 +87,7 @@ export const ProfileView: React.FC<{
   const [error, setError] = useState<string | null>(null);
 
   const isHR = user?.role === 'HR';
+  const canEditPerformance = user?.role === 'HR' || user?.role === 'MANAGER';
 
   useEffect(() => {
     if (!employeeId) return;
@@ -155,6 +163,7 @@ export const ProfileView: React.FC<{
   }
 
   const isOwnProfile = user?.employeeId === employeeId;
+  const canViewEmployeeDocuments = !isOwnProfile && ['HR', 'LEADERSHIP', 'MANAGER'].includes(user?.role ?? 'EMPLOYEE');
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'about', label: 'About' },
@@ -162,6 +171,8 @@ export const ProfileView: React.FC<{
     { id: 'performance', label: 'Performance' },
     { id: 'leaves', label: 'Leaves' },
     { id: 'attendance', label: 'Attendance' },
+    ...(canViewEmployeeDocuments ? [{ id: 'documents' as Tab, label: 'Documents' }] : []),
+    ...(isOwnProfile ? [{ id: 'account' as Tab, label: 'Account Settings' }] : []),
   ];
 
   return (
@@ -170,12 +181,14 @@ export const ProfileView: React.FC<{
       <div className="bg-gradient-to-r from-orange-50 via-amber-50/50 to-orange-50/20 border-b border-orange-100/60">
         <div className="mx-auto px-6 pt-6 pb-0">
           {/* Back */}
-          <button
-            onClick={() => (onBack ? onBack() : navigate('/'))}
-            className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-[#f46617] mb-6 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" /> Back
-          </button>
+          {!hideBack && (
+            <button
+              onClick={() => (onBack ? onBack() : navigate('/'))}
+              className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-[#f46617] mb-6 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Back
+            </button>
+          )}
 
           {/* Profile header */}
           <div className="flex flex-col md:flex-row items-start gap-6 pb-6">
@@ -308,25 +321,37 @@ export const ProfileView: React.FC<{
 
       {/* Tab Content */}
       <div className="mx-auto px-6 py-6 bg-white">
-        {activeTab === 'about' && <AboutSection employee={employee} isHR={isHR} onRefresh={loadProfile} />}
+        {activeTab === 'about' && <AboutSection employee={employee} isHR={isHR} isOwnProfile={isOwnProfile} onRefresh={loadProfile} />}
         {activeTab === 'performance' && (
           <PerformanceTab
             employeeId={employeeId}
             kras={kras}
             summary={summary}
-            isHR={isHR}
+            isHR={canEditPerformance}
             onRefresh={refreshPerformance}
             theme="light"
           />
         )}
         {activeTab === 'leaves' && <LeavesTab leaves={leaves} employee={employee} isHR={isHR} onRefresh={loadProfile} theme="light" />}
         {activeTab === 'attendance' && <AttendanceTab employeeId={employeeId} isHR={isHR} theme="light" />}
+        {activeTab === 'documents' && canViewEmployeeDocuments && (
+          <EmployeeDocumentsTab employeeId={employeeId} employeeName={employee.name} />
+        )}
         {activeTab === 'salary' && isOwnProfile && employee && (
           <SalaryTab
             employeeId={employeeId}
             employeeName={employee.name}
             employeeDepartment={employee.department || ''}
             employeePosition={employee.position || ''}
+          />
+        )}
+        {activeTab === 'account' && isOwnProfile && (
+          <AccountSettingsSection
+            employee={employee}
+            onAvatarUpdated={async () => {
+              await refreshUser();
+              await loadProfile();
+            }}
           />
         )}
       </div>
@@ -336,12 +361,23 @@ export const ProfileView: React.FC<{
 
 // ─── About Section ───────────────────────────────────────────
 
-const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefresh: () => void }> = ({ employee, isHR, onRefresh }) => {
+const skillsFromEmployee = (value: EmployeeDetail['skills']): string => {
+  if (Array.isArray(value)) return value.join(', ');
+  if (typeof value === 'string') {
+    try { return (JSON.parse(value) as string[]).join(', '); } catch { return value; }
+  }
+  return '';
+};
+
+const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnProfile: boolean; onRefresh: () => void }> = ({ employee, isHR, isOwnProfile, onRefresh }) => {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
+  const [editingOwnDetails, setEditingOwnDetails] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarStatus, setAvatarStatus] = useState<string | null>(null);
   type ManagerCandidate = {
     employeeId: number;
     name: string;
@@ -371,14 +407,62 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
     avatar: employee.avatar || '',
     employeeType: employee.employeeType || '',
     tallyLedgerName: employee.tallyLedgerName || '',
+    employeeNumber: employee.employeeNumber || '',
+    panNumber: employee.panNumber || '',
+    uanNumber: employee.uanNumber || '',
+    pfAccountNumber: employee.pfAccountNumber || '',
+    esiNumber: employee.esiNumber || '',
+    pranNumber: employee.pranNumber || '',
+    taxRegime: employee.taxRegime || '',
     joinDate: employee.joinDate ? employee.joinDate.split('T')[0] : '',
     managerId: employee.managerId ?? null as number | null,
     managerIds: employee.managers?.map(m => m.manager.id) ?? (employee.managerId ? [employee.managerId] : []) as number[],
+    createUser: false,
+    username: employee.user?.username || '',
+    password: '',
+    systemRole: employee.user?.role || 'EMPLOYEE' as UserRole,
   });
 
   const startEditing = async () => {
     setEditing(true);
     setSaveError(null);
+    setAvatarStatus(null);
+    setForm({
+      name: employee.name || '',
+      biometricId: employee.biometricId ? String(employee.biometricId) : '',
+      bio: employee.bio || '',
+      skills: (() => {
+        if (Array.isArray(employee.skills)) return (employee.skills as string[]).join(', ');
+        if (typeof employee.skills === 'string') {
+          try { return (JSON.parse(employee.skills) as string[]).join(', '); } catch { return employee.skills; }
+        }
+        return '';
+      })(),
+      education: employee.education || '',
+      experience: employee.experience || '',
+      position: employee.position || '',
+      department: employee.department || '',
+      phone: employee.phone || '',
+      email: employee.email || '',
+      gender: employee.gender || '',
+      avatar: employee.avatar || '',
+      employeeType: employee.employeeType || '',
+      tallyLedgerName: employee.tallyLedgerName || '',
+      employeeNumber: employee.employeeNumber || '',
+      panNumber: employee.panNumber || '',
+      uanNumber: employee.uanNumber || '',
+      pfAccountNumber: employee.pfAccountNumber || '',
+      esiNumber: employee.esiNumber || '',
+      pranNumber: employee.pranNumber || '',
+      taxRegime: employee.taxRegime || '',
+      joinDate: employee.joinDate ? employee.joinDate.split('T')[0] : '',
+      managerId: employee.managerId ?? null as number | null,
+      managerIds: employee.managers?.map(m => m.manager.id) ?? (employee.managerId ? [employee.managerId] : []) as number[],
+      createUser: false,
+      username: employee.user?.username || '',
+      password: '',
+      systemRole: employee.user?.role || 'EMPLOYEE' as UserRole,
+    });
     try {
       const mgrRes = await employeeApi.managersList();
 
@@ -412,12 +496,45 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
     }
   };
 
+  const handleAvatarSelect = async (file: File) => {
+    console.log('[Profile/AboutSection] avatar:onSelect:start', {
+      employeeId: employee.id,
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+    });
+    setAvatarSaving(true);
+    setAvatarStatus(null);
+    try {
+      const compressed = await compressAvatarImage(file);
+      console.log('[Profile/AboutSection] avatar:compressed', {
+        employeeId: employee.id,
+        fileName: compressed.name,
+        fileType: compressed.type,
+        fileSize: compressed.size,
+      });
+      const response = await employeeApi.updateAvatar(employee.id, compressed);
+      console.log('[Profile/AboutSection] avatar:update-response', response);
+      const avatar = response.data?.avatar || null;
+      setForm(p => ({ ...p, avatar: avatar || '' }));
+      setAvatarStatus('Photo updated successfully');
+    } catch (err: any) {
+      console.error('[Profile/AboutSection] avatar:error', err);
+      setAvatarStatus(err.message || 'Failed to update photo');
+    } finally {
+      console.log('[Profile/AboutSection] avatar:onSelect:done', {
+        employeeId: employee.id,
+      });
+      setAvatarSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSaveError(null);
     try {
       const skillsArr = form.skills.split(',').map(s => s.trim()).filter(Boolean);
-      const payload: EmployeeMutationPayload = {
+      const payload: any = {
         name: form.name,
         biometricId: form.biometricId ? parseInt(form.biometricId, 10) : null,
         bio: form.bio,
@@ -432,15 +549,72 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
         avatar: form.avatar || null,
         employeeType: form.employeeType,
         tallyLedgerName: form.tallyLedgerName || null,
+        employeeNumber: form.employeeNumber || null,
+        panNumber: form.panNumber || null,
+        uanNumber: form.uanNumber || null,
+        pfAccountNumber: form.pfAccountNumber || null,
+        esiNumber: form.esiNumber || null,
+        pranNumber: form.pranNumber || null,
+        taxRegime: form.taxRegime || null,
         joinDate: form.joinDate || null,
         managerIds: form.managerIds && form.managerIds.length > 0 ? form.managerIds : [],
       };
+
+      if (!employee.user) {
+        if (form.createUser) {
+          if (!form.username.trim() || !form.password.trim()) {
+            throw new Error('Username and password are required for user account creation');
+          }
+          payload.createUser = true;
+          payload.username = form.username;
+          payload.password = form.password;
+          payload.role = form.systemRole;
+        }
+      } else {
+        const roleChanged = form.systemRole !== employee.user.role;
+        if (roleChanged) {
+          payload.role = form.systemRole;
+        }
+      }
+
       await employeeApi.update(employee.id, payload);
       await onRefresh();
       setEditing(false);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to update employee profile';
       setSaveError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEditingOwnDetails = () => {
+    setForm(previous => ({
+      ...previous,
+      bio: employee.bio || '',
+      skills: skillsFromEmployee(employee.skills),
+      education: employee.education || '',
+      experience: employee.experience || '',
+    }));
+    setSaveError(null);
+    setEditingOwnDetails(true);
+  };
+
+  const handleOwnDetailsSave = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const skills = form.skills.split(',').map(skill => skill.trim()).filter(Boolean);
+      await employeeApi.updateProfileDetails(employee.id, {
+        bio: form.bio.trim() || null,
+        skills,
+        education: form.education.trim() || null,
+        experience: form.experience.trim() || null,
+      });
+      await onRefresh();
+      setEditingOwnDetails(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Failed to update profile details');
     } finally {
       setSaving(false);
     }
@@ -470,6 +644,13 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
   return (
     <div className="space-y-6">
       {/* Action */}
+      {isOwnProfile && !isHR && !editingOwnDetails && (
+        <div className="flex justify-end mb-2">
+          <button onClick={startEditingOwnDetails} className="btn-orange px-4 py-2 text-xs font-bold rounded-2xl">
+            Edit About Details
+          </button>
+        </div>
+      )}
       {isHR && !editing && (
         <div className="flex justify-end gap-3 mb-2">
           <button
@@ -534,13 +715,14 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
             </div>
 
             <div className="col-span-1 sm:col-span-2">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Profile Photo URL</label>
-              <input
-                type="url"
-                value={form.avatar}
-                onChange={e => setForm(p => ({ ...p, avatar: e.target.value }))}
-                placeholder="https://example.com/photo.jpg"
-                className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
+              <AvatarUploadPicker
+                name={form.name || employee.name}
+                avatar={form.avatar || employee.avatar}
+                gender={form.gender || employee.gender}
+                disabled={saving}
+                loading={avatarSaving}
+                status={avatarStatus}
+                onSelect={handleAvatarSelect}
               />
             </div>
             <div className="col-span-1 sm:col-span-2">
@@ -582,6 +764,72 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
                 value={form.tallyLedgerName}
                 onChange={e => setForm(p => ({ ...p, tallyLedgerName: e.target.value }))}
                 placeholder="Exact Tally payroll ledger name"
+                className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
+              />
+            </div>
+            <div className="col-span-1 sm:col-span-2 pt-2 border-t border-orange-100/60">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Payroll & Statutory Details</p>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Employee Number</label>
+              <input
+                value={form.employeeNumber}
+                onChange={e => setForm(p => ({ ...p, employeeNumber: e.target.value }))}
+                placeholder="e.g. Afac10375"
+                className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Tax Regime</label>
+              <input
+                value={form.taxRegime}
+                onChange={e => setForm(p => ({ ...p, taxRegime: e.target.value }))}
+                placeholder="e.g. Regular Tax Regime"
+                className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">PAN Number</label>
+              <input
+                value={form.panNumber}
+                onChange={e => setForm(p => ({ ...p, panNumber: e.target.value }))}
+                placeholder="e.g. IRLPK0350R"
+                className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">UAN Number</label>
+              <input
+                value={form.uanNumber}
+                onChange={e => setForm(p => ({ ...p, uanNumber: e.target.value }))}
+                placeholder="Universal Account Number"
+                className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">PF Account Number</label>
+              <input
+                value={form.pfAccountNumber}
+                onChange={e => setForm(p => ({ ...p, pfAccountNumber: e.target.value }))}
+                placeholder="e.g. 1021632"
+                className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">ESI Number</label>
+              <input
+                value={form.esiNumber}
+                onChange={e => setForm(p => ({ ...p, esiNumber: e.target.value }))}
+                placeholder="ESI account number"
+                className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">PR Account Number (PRAN)</label>
+              <input
+                value={form.pranNumber}
+                onChange={e => setForm(p => ({ ...p, pranNumber: e.target.value }))}
+                placeholder="Pension Account Number"
                 className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
               />
             </div>
@@ -645,6 +893,110 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
                 </div>
               )}
             </div>
+
+            {/* User Account Details Section */}
+            {!employee.user ? (
+              <div className="col-span-1 sm:col-span-2 pt-2 space-y-4">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.createUser}
+                    onChange={e => setForm(p => ({ ...p, createUser: e.target.checked }))}
+                    disabled={saving}
+                    className="w-4 h-4 rounded border-orange-200 text-[#f46617] focus:ring-brand-orange/30 accent-[#f46617] cursor-pointer bg-white"
+                  />
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                    Create User Account (System Access)
+                  </span>
+                </label>
+
+                {form.createUser && (
+                  <div className="p-4 rounded-2xl border border-orange-100 bg-orange-50/20 space-y-4 animate-scale-in">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                          Username *
+                        </label>
+                        <input
+                          type="text"
+                          required={form.createUser}
+                          value={form.username}
+                          onChange={e => setForm(p => ({ ...p, username: e.target.value }))}
+                          disabled={saving}
+                          placeholder="Username for login"
+                          className="w-full text-slate-800 bg-white text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                          Password *
+                        </label>
+                        <input
+                          type="password"
+                          required={form.createUser}
+                          value={form.password}
+                          onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                          disabled={saving}
+                          placeholder="Min 6 characters"
+                          className="w-full text-slate-800 bg-white text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                          Access Role
+                        </label>
+                        <select
+                          value={form.systemRole}
+                          onChange={e => setForm(p => ({ ...p, systemRole: e.target.value as UserRole }))}
+                          disabled={saving}
+                          className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all cursor-pointer"
+                        >
+                          <option value="EMPLOYEE">Employee (Standard Access)</option>
+                          <option value="MANAGER">Manager (Team Approval/Performance)</option>
+                          <option value="HR">HR Admin (Full Access)</option>
+                          <option value="LEADERSHIP">Leadership (Company-wide Visibility)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="col-span-1 sm:col-span-2 pt-2 space-y-4">
+                <div className="p-4 rounded-2xl border border-orange-100 bg-orange-50/20 space-y-4">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Linked User Account Settings</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                        Username (linked)
+                      </label>
+                      <div className="w-full text-slate-600 bg-slate-50 text-sm rounded-xl px-3.5 py-2.5 border border-slate-100">
+                        {employee.user.username}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1.5">The employee manages credentials from Account Settings.</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                        Access Role
+                      </label>
+                      <select
+                        value={form.systemRole}
+                        onChange={e => setForm(p => ({ ...p, systemRole: e.target.value as UserRole }))}
+                        disabled={saving}
+                        className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all cursor-pointer"
+                      >
+                        <option value="EMPLOYEE">Employee (Standard Access)</option>
+                        <option value="MANAGER">Manager (Team Approval/Performance)</option>
+                        <option value="HR">HR Admin (Full Access)</option>
+                        <option value="LEADERSHIP">Leadership (Company-wide Visibility)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex gap-3 pt-3 border-t border-orange-100/30">
             <button
@@ -660,6 +1012,40 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
             >
               Cancel
             </button>
+          </div>
+        </div>
+      ) : editingOwnDetails ? (
+        <div className="bg-white rounded-[28px] p-6 border border-orange-100 shadow-sm space-y-5 text-slate-800">
+          <div>
+            <h3 className="text-slate-850 font-black text-lg">Edit About Details</h3>
+            <p className="text-xs text-slate-400 mt-1">Keep your professional profile current for colleagues and managers.</p>
+          </div>
+          {saveError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-600">{saveError}</div>
+          )}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Bio Description</label>
+            <textarea rows={4} value={form.bio} onChange={event => setForm(previous => ({ ...previous, bio: event.target.value }))} className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 resize-none" placeholder="Write a short professional introduction" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Specialist Skills</label>
+            <input value={form.skills} onChange={event => setForm(previous => ({ ...previous, skills: event.target.value }))} className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20" placeholder="React, Payroll, Recruitment (comma separated)" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Education Details</label>
+              <textarea rows={3} value={form.education} onChange={event => setForm(previous => ({ ...previous, education: event.target.value }))} className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 resize-none" placeholder="Degree, institution and specialization" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Professional Experience</label>
+              <textarea rows={3} value={form.experience} onChange={event => setForm(previous => ({ ...previous, experience: event.target.value }))} className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 resize-none" placeholder="Summarize your professional experience" />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-3 border-t border-orange-100/30">
+            <button onClick={handleOwnDetailsSave} disabled={saving} className="btn-orange px-5 py-2.5 text-xs font-bold rounded-xl">
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save Details
+            </button>
+            <button onClick={() => setEditingOwnDetails(false)} disabled={saving} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50">Cancel</button>
           </div>
         </div>
       ) : (
@@ -730,8 +1116,368 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; onRefres
               ))}
             </div>
           </div>
+
+          <PayrollDetailsCard
+            employee={employee}
+            canEdit={isHR || isOwnProfile}
+            onSaved={onRefresh}
+          />
         </div>
       )}
+    </div>
+  );
+};
+
+// ─── Account Settings Section ─────────────────────────────────
+
+const AccountSettingsSection: React.FC<{
+  employee: EmployeeDetail;
+  onAvatarUpdated: () => Promise<void>;
+}> = ({ employee, onAvatarUpdated }) => {
+  const { user, refreshUser } = useAuth();
+
+  const [usernameForm, setUsernameForm] = useState({
+    newUsername: user?.username || '',
+    currentPassword: '',
+  });
+
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+
+  const [usernameStatus, setUsernameStatus] = useState<{
+    type: 'success' | 'error' | null;
+    message: string;
+  }>({ type: null, message: '' });
+
+  const [passwordStatus, setPasswordStatus] = useState<{
+    type: 'success' | 'error' | null;
+    message: string;
+  }>({ type: null, message: '' });
+
+  const [savingUsername, setSavingUsername] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [showCurrentPw1, setShowCurrentPw1] = useState(false);
+  const [showCurrentPw2, setShowCurrentPw2] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarStatus, setAvatarStatus] = useState<string | null>(null);
+
+  const handleAvatarSelect = async (file: File) => {
+    console.log('[Profile/AccountSettings] avatar:onSelect:start', {
+      userId: user?.id,
+      employeeId: user?.employeeId,
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+    });
+    setAvatarSaving(true);
+    setAvatarStatus(null);
+    try {
+      const compressed = await compressAvatarImage(file);
+      console.log('[Profile/AccountSettings] avatar:compressed', {
+        userId: user?.id,
+        employeeId: user?.employeeId,
+        fileName: compressed.name,
+        fileType: compressed.type,
+        fileSize: compressed.size,
+      });
+      const response = await authApi.updateAvatar(compressed);
+      console.log('[Profile/AccountSettings] avatar:update-response', response);
+      setAvatarStatus('Photo updated successfully');
+      await refreshUser();
+      console.log('[Profile/AccountSettings] avatar:refreshUser-complete');
+      await onAvatarUpdated();
+      console.log('[Profile/AccountSettings] avatar:onAvatarUpdated-complete');
+      return response;
+    } catch (err: any) {
+      console.error('[Profile/AccountSettings] avatar:error', err);
+      setAvatarStatus(err.message || 'Failed to update photo');
+      throw err;
+    } finally {
+      console.log('[Profile/AccountSettings] avatar:onSelect:done', {
+        userId: user?.id,
+        employeeId: user?.employeeId,
+      });
+      setAvatarSaving(false);
+    }
+  };
+
+  const handleUpdateUsername = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usernameForm.currentPassword.trim()) {
+      setUsernameStatus({ type: 'error', message: 'Current password is required to confirm identity.' });
+      return;
+    }
+    if (!usernameForm.newUsername.trim()) {
+      setUsernameStatus({ type: 'error', message: 'New username cannot be empty.' });
+      return;
+    }
+    if (usernameForm.newUsername.trim() === user?.username) {
+      setUsernameStatus({ type: 'error', message: 'New username is the same as your current one.' });
+      return;
+    }
+
+    setSavingUsername(true);
+    setUsernameStatus({ type: null, message: '' });
+    try {
+      await authApi.updateCredentials({
+        username: usernameForm.newUsername.trim(),
+        currentPassword: usernameForm.currentPassword,
+      });
+      setUsernameStatus({ type: 'success', message: 'Username updated successfully! Your new username is active immediately.' });
+      setUsernameForm(p => ({ ...p, currentPassword: '' }));
+      await refreshUser();
+    } catch (err: any) {
+      setUsernameStatus({ type: 'error', message: err.message || 'Failed to update username.' });
+    } finally {
+      setSavingUsername(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordForm.currentPassword.trim()) {
+      setPasswordStatus({ type: 'error', message: 'Current password is required.' });
+      return;
+    }
+    if (!passwordForm.newPassword.trim()) {
+      setPasswordStatus({ type: 'error', message: 'New password cannot be empty.' });
+      return;
+    }
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordStatus({ type: 'error', message: 'New password must be at least 6 characters.' });
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordStatus({ type: 'error', message: 'New password and confirm password do not match.' });
+      return;
+    }
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      setPasswordStatus({ type: 'error', message: 'New password must be different from your current password.' });
+      return;
+    }
+
+    setSavingPassword(true);
+    setPasswordStatus({ type: null, message: '' });
+    try {
+      await authApi.updateCredentials({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      setPasswordStatus({ type: 'success', message: 'Password updated successfully! Use your new password the next time you log in.' });
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err: any) {
+      setPasswordStatus({ type: 'error', message: err.message || 'Failed to update password.' });
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  const inputClass = "w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400 pr-10";
+  const labelClass = "block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5";
+
+  return (
+    <div className="space-y-6 max-w-xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-2">
+        <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-orange-400 to-[#f46617] flex items-center justify-center shadow-lg shadow-orange-500/20">
+          <Shield className="w-4 h-4 text-white" />
+        </div>
+        <div>
+          <h3 className="text-lg font-black text-slate-800 leading-tight">Account Settings</h3>
+          <p className="text-xs text-slate-500 font-semibold">Manage your login credentials privately</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-amber-50/60 border border-amber-100 px-4 py-3 text-xs text-amber-700 font-semibold flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+        <span>For your privacy, changes to credentials are hashed and encrypted. Even system administrators cannot read your password.</span>
+      </div>
+
+      {/* ── Change Username ── */}
+      <div className="bg-white rounded-3xl p-6 border border-orange-100/50 shadow-card space-y-3">
+        <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
+          <span className="w-6 h-6 rounded-lg bg-orange-50 flex items-center justify-center text-[#f46617] border border-orange-100">
+            <Camera className="w-3.5 h-3.5" />
+          </span>
+          Profile Photo
+        </h4>
+        <AvatarUploadPicker
+          name={employee.name}
+          avatar={employee.avatar}
+          gender={employee.gender}
+          loading={avatarSaving}
+          status={avatarStatus}
+          onSelect={handleAvatarSelect}
+        />
+      </div>
+
+      <div className="bg-white rounded-3xl p-6 border border-orange-100/50 shadow-card space-y-4">
+        <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
+          <span className="w-6 h-6 rounded-lg bg-orange-50 flex items-center justify-center text-[#f46617] text-[10px] font-black border border-orange-100">@</span>
+          Change Username
+        </h4>
+        <p className="text-xs text-slate-500 font-medium -mt-1">
+          Current username: <span className="font-black text-slate-700">{user?.username}</span>
+        </p>
+
+        <form onSubmit={handleUpdateUsername} className="space-y-4">
+          <div>
+            <label className={labelClass}>New Username</label>
+            <input
+              type="text"
+              value={usernameForm.newUsername}
+              onChange={e => setUsernameForm(p => ({ ...p, newUsername: e.target.value }))}
+              placeholder="Enter new username"
+              disabled={savingUsername}
+              className={inputClass.replace('pr-10', '')}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Confirm with Current Password</label>
+            <div className="relative">
+              <input
+                type={showCurrentPw1 ? 'text' : 'password'}
+                value={usernameForm.currentPassword}
+                onChange={e => setUsernameForm(p => ({ ...p, currentPassword: e.target.value }))}
+                placeholder="Enter current password to confirm"
+                disabled={savingUsername}
+                className={inputClass}
+              />
+              <button type="button" onClick={() => setShowCurrentPw1(p => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold">
+                {showCurrentPw1 ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
+
+          {usernameStatus.type && (
+            <div className={`flex items-start gap-2 text-xs font-semibold rounded-xl px-3 py-2.5 ${usernameStatus.type === 'success' ? 'bg-emerald-50 border border-emerald-100 text-emerald-700' : 'bg-red-50 border border-red-100 text-red-600'}`}>
+              {usernameStatus.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+              <span>{usernameStatus.message}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={savingUsername}
+            className="btn-orange px-5 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 disabled:opacity-60"
+          >
+            {savingUsername ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {savingUsername ? 'Updating...' : 'Update Username'}
+          </button>
+        </form>
+      </div>
+
+      {/* ── Change Password ── */}
+      <div className="bg-white rounded-3xl p-6 border border-orange-100/50 shadow-card space-y-4">
+        <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
+          <span className="w-6 h-6 rounded-lg bg-orange-50 flex items-center justify-center text-[#f46617] border border-orange-100">
+            <Shield className="w-3 h-3" />
+          </span>
+          Change Password
+        </h4>
+
+        <form onSubmit={handleUpdatePassword} className="space-y-4">
+          <div>
+            <label className={labelClass}>Current Password</label>
+            <div className="relative">
+              <input
+                type={showCurrentPw2 ? 'text' : 'password'}
+                value={passwordForm.currentPassword}
+                onChange={e => setPasswordForm(p => ({ ...p, currentPassword: e.target.value }))}
+                placeholder="Enter your current password"
+                disabled={savingPassword}
+                className={inputClass}
+              />
+              <button type="button" onClick={() => setShowCurrentPw2(p => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold">
+                {showCurrentPw2 ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>New Password</label>
+            <div className="relative">
+              <input
+                type={showNewPw ? 'text' : 'password'}
+                value={passwordForm.newPassword}
+                onChange={e => setPasswordForm(p => ({ ...p, newPassword: e.target.value }))}
+                placeholder="Min 6 characters"
+                disabled={savingPassword}
+                className={inputClass}
+              />
+              <button type="button" onClick={() => setShowNewPw(p => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold">
+                {showNewPw ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {/* Password strength indicator */}
+            {passwordForm.newPassword && (
+              <div className="mt-2 space-y-1">
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4].map(i => (
+                    <div key={i} className={`h-1 flex-1 rounded-full transition-all ${
+                      passwordForm.newPassword.length >= i * 3
+                        ? i <= 1 ? 'bg-red-400' : i <= 2 ? 'bg-amber-400' : i <= 3 ? 'bg-yellow-400' : 'bg-emerald-400'
+                        : 'bg-slate-100'
+                    }`} />
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 font-semibold">
+                  {passwordForm.newPassword.length < 6 ? 'Too short' : passwordForm.newPassword.length < 9 ? 'Fair' : passwordForm.newPassword.length < 12 ? 'Good' : 'Strong'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className={labelClass}>Confirm New Password</label>
+            <div className="relative">
+              <input
+                type={showConfirmPw ? 'text' : 'password'}
+                value={passwordForm.confirmPassword}
+                onChange={e => setPasswordForm(p => ({ ...p, confirmPassword: e.target.value }))}
+                placeholder="Repeat your new password"
+                disabled={savingPassword}
+                className={inputClass}
+              />
+              <button type="button" onClick={() => setShowConfirmPw(p => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold">
+                {showConfirmPw ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword && (
+              <p className="text-[10px] text-red-500 font-semibold mt-1">Passwords do not match</p>
+            )}
+            {passwordForm.confirmPassword && passwordForm.newPassword === passwordForm.confirmPassword && passwordForm.newPassword.length >= 6 && (
+              <p className="text-[10px] text-emerald-600 font-semibold mt-1 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Passwords match</p>
+            )}
+          </div>
+
+          {passwordStatus.type && (
+            <div className={`flex items-start gap-2 text-xs font-semibold rounded-xl px-3 py-2.5 ${passwordStatus.type === 'success' ? 'bg-emerald-50 border border-emerald-100 text-emerald-700' : 'bg-red-50 border border-red-100 text-red-600'}`}>
+              {passwordStatus.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+              <span>{passwordStatus.message}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={savingPassword}
+            className="btn-orange px-5 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 disabled:opacity-60"
+          >
+            {savingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+            {savingPassword ? 'Updating...' : 'Update Password'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 };
@@ -745,7 +1491,7 @@ const Profile: React.FC = () => {
 
   const initialTab = (() => {
     const param = new URLSearchParams(location.search).get('tab');
-    if (param === 'leaves' || param === 'performance' || param === 'attendance' || param === 'salary') return param as Tab;
+    if (param === 'leaves' || param === 'performance' || param === 'attendance' || param === 'documents' || param === 'salary') return param as Tab;
     return 'about' as Tab;
   })();
 

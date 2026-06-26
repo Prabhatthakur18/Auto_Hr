@@ -1,20 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   DollarSign,
   Loader2,
   AlertCircle,
-  ChevronDown,
-  ChevronUp,
-  Printer,
+  Download,
   X,
   FileText,
-  Building2,
-  User,
-  Calendar,
-  Briefcase,
 } from 'lucide-react';
-import { salaryApi, type SalaryBreakdown, type SalaryTotals, type SalarySlip } from '../../services/api';
-import logoImg from '../../images/autologo-removebg-preview.png';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import {
+  salaryApi,
+  employeeApi,
+  type SalaryBreakdown,
+  type SalaryTotals,
+  type SalarySlip,
+  type SalaryLineItem,
+  type EmployeeDetail,
+} from '../../services/api';
+import logoImg from '../../images/amato-new-logo-black.png';
+import { matchesDateFilter, matchesSearch, type PageFilterState } from '../../utils/pageFilters';
 
 // ─── Format Helpers ──────────────────────────────────────────
 
@@ -33,6 +39,116 @@ const formatMonth = (month: string): string => {
   return date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 };
 
+const numberToIndianWords = (value: number): string => {
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const belowThousand = (amount: number): string => {
+    const parts: string[] = [];
+    if (amount >= 100) {
+      parts.push(`${ones[Math.floor(amount / 100)]} Hundred`);
+      amount %= 100;
+    }
+    if (amount >= 20) {
+      parts.push(tens[Math.floor(amount / 10)]);
+      amount %= 10;
+    }
+    if (amount > 0) parts.push(ones[amount]);
+    return parts.join(' ');
+  };
+
+  const amount = Math.max(0, Math.round(Number(value)));
+  if (amount === 0) return 'Zero Rupees Only';
+  let remainder = amount;
+  const words: string[] = [];
+  [
+    { divisor: 10000000, label: 'Crore' },
+    { divisor: 100000, label: 'Lakh' },
+    { divisor: 1000, label: 'Thousand' },
+  ].forEach(({ divisor, label }) => {
+    const count = Math.floor(remainder / divisor);
+    if (count > 0) {
+      words.push(`${belowThousand(count)} ${label}`);
+      remainder %= divisor;
+    }
+  });
+  if (remainder > 0) words.push(belowThousand(remainder));
+  return `${words.join(' ')} Rupees Only`;
+};
+
+const formatDate = (value: string | null | undefined): string => {
+  if (!value) return '-';
+  return new Date(value).toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
+};
+
+/**
+ * Normalizes a slip's breakdownJson into {earnings, deductions} line-item
+ * arrays. Older slips (generated before dynamic line items) stored a flat
+ * fixed-key object instead — fall back to label-mapping those keys so old
+ * data still renders correctly.
+ */
+const LEGACY_EARNING_LABELS: Record<string, string> = {
+  basicSalary: 'Basic Salary',
+  hra: 'HRA',
+  da: 'DA',
+  ta: 'TA',
+  medicalAllowance: 'Medical Allowance',
+  specialAllowance: 'Special Allowance',
+};
+const LEGACY_DEDUCTION_LABELS: Record<string, string> = {
+  pf: 'PF',
+  esi: 'ESI',
+  tax: 'Tax / TDS',
+  otherDeductions: 'Other Deductions',
+};
+
+function normalizeBreakdown(raw: SalarySlip['breakdownJson']): { earnings: SalaryLineItem[]; deductions: SalaryLineItem[] } {
+  if (!raw) return { earnings: [], deductions: [] };
+
+  if (Array.isArray((raw as any).earnings) || Array.isArray((raw as any).deductions)) {
+    return {
+      earnings: (raw as any).earnings ?? [],
+      deductions: (raw as any).deductions ?? [],
+    };
+  }
+
+  const legacy = raw as Record<string, number>;
+  const earnings = Object.entries(LEGACY_EARNING_LABELS)
+    .filter(([key]) => Number(legacy[key]) > 0)
+    .map(([key, label]) => ({ label, amount: Number(legacy[key]) }));
+  const deductions = Object.entries(LEGACY_DEDUCTION_LABELS)
+    .filter(([key]) => Number(legacy[key]) > 0)
+    .map(([key, label]) => ({ label, amount: Number(legacy[key]) }));
+
+  return { earnings, deductions };
+}
+
+const normalizeSalaryLabel = (label: string): string => {
+  return label.toLowerCase().replace(/[^a-z0-9]/g, '');
+};
+
+const EARNING_DISPLAY_ORDER: Record<string, number> = {
+  basicsalary: 1,
+  hra: 2,
+  conveyanceallowance: 3,
+  conveyanceallowances: 3,
+  otherallowance: 4,
+  otherallowances: 4,
+};
+
+const sortEarningsForPayslip = (earnings: SalaryLineItem[]): SalaryLineItem[] => {
+  return earnings
+    .map((earning, index) => ({ earning, index }))
+    .sort((a, b) => {
+      const aOrder = EARNING_DISPLAY_ORDER[normalizeSalaryLabel(a.earning.label)] ?? 99;
+      const bOrder = EARNING_DISPLAY_ORDER[normalizeSalaryLabel(b.earning.label)] ?? 99;
+      return aOrder - bOrder || a.index - b.index;
+    })
+    .map(({ earning }) => earning);
+};
+
 // ─── Props ───────────────────────────────────────────────────
 
 interface SalaryTabProps {
@@ -41,28 +157,8 @@ interface SalaryTabProps {
   employeeDepartment?: string;
   employeePosition?: string;
   theme?: 'light' | 'dark';
+  filters?: PageFilterState;
 }
-
-// ─── Earnings / Deductions Labels ────────────────────────────
-
-interface BreakdownEntry {
-  label: string;
-  key: keyof SalaryBreakdown;
-  type: 'earning' | 'deduction';
-}
-
-const BREAKDOWN_FIELDS: BreakdownEntry[] = [
-  { label: 'Basic Salary', key: 'basicSalary', type: 'earning' },
-  { label: 'HRA', key: 'hra', type: 'earning' },
-  { label: 'DA', key: 'da', type: 'earning' },
-  { label: 'TA', key: 'ta', type: 'earning' },
-  { label: 'Medical Allowance', key: 'medicalAllowance', type: 'earning' },
-  { label: 'Special Allowance', key: 'specialAllowance', type: 'earning' },
-  { label: 'PF', key: 'pf', type: 'deduction' },
-  { label: 'ESI', key: 'esi', type: 'deduction' },
-  { label: 'Tax / TDS', key: 'tax', type: 'deduction' },
-  { label: 'Other Deductions', key: 'otherDeductions', type: 'deduction' },
-];
 
 // ─── Main Salary Tab Component ───────────────────────────────
 
@@ -71,11 +167,12 @@ const SalaryTab: React.FC<SalaryTabProps> = ({
   employeeName,
   employeeDepartment,
   employeePosition,
-  theme = 'light',
+  filters,
 }) => {
   const [breakdowns, setBreakdowns] = useState<SalaryBreakdown[]>([]);
   const [totals, setTotals] = useState<SalaryTotals | null>(null);
   const [slips, setSlips] = useState<SalarySlip[]>([]);
+  const [employee, setEmployee] = useState<EmployeeDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSlip, setSelectedSlip] = useState<SalarySlip | null>(null);
@@ -88,9 +185,10 @@ const SalaryTab: React.FC<SalaryTabProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const [breakdownRes, slipsRes] = await Promise.allSettled([
+      const [breakdownRes, slipsRes, employeeRes] = await Promise.allSettled([
         salaryApi.getMyBreakdown(),
         salaryApi.getMySlips(),
+        employeeApi.get(employeeId),
       ]);
 
       if (breakdownRes.status === 'fulfilled' && breakdownRes.value.data) {
@@ -99,6 +197,9 @@ const SalaryTab: React.FC<SalaryTabProps> = ({
       }
       if (slipsRes.status === 'fulfilled' && slipsRes.value.data) {
         setSlips(slipsRes.value.data.slips);
+      }
+      if (employeeRes.status === 'fulfilled' && employeeRes.value.data) {
+        setEmployee(employeeRes.value.data.employee);
       }
     } catch (err) {
       console.error('Failed to load salary data:', err);
@@ -109,6 +210,24 @@ const SalaryTab: React.FC<SalaryTabProps> = ({
   };
 
   const latest = breakdowns[0];
+  const filteredSlips = filters
+    ? slips.filter(slip =>
+        matchesSearch(filters.search, [
+          formatMonth(slip.month),
+          slip.month,
+          slip.grossSalary,
+          slip.totalDeductions,
+          slip.netSalary,
+          slip.workingDays,
+          slip.daysPresent,
+          slip.generatedAt,
+          employeeName,
+          employee?.name,
+          employeeDepartment,
+          employeePosition,
+        ]) && matchesDateFilter(filters, [`${slip.month}-01`, slip.generatedAt])
+      )
+    : slips;
 
   if (loading) {
     return (
@@ -153,15 +272,19 @@ const SalaryTab: React.FC<SalaryTabProps> = ({
                   Earnings
                 </h4>
                 <div className="space-y-2">
-                  {BREAKDOWN_FIELDS.filter(f => f.type === 'earning').map(field => {
-                    const value = Number(latest[field.key]) || 0;
-                    return (
-                      <div key={field.key} className="flex justify-between items-center text-sm">
-                        <span className="text-slate-600 font-medium">{field.label}</span>
-                        <span className="font-bold text-slate-800">{formatCurrency(value)}</span>
-                      </div>
-                    );
-                  })}
+                  {([
+                    ['Basic Salary', latest.basicSalary],
+                    ['HRA', latest.hra],
+                    ['DA', latest.da],
+                    ['TA', latest.ta],
+                    ['Medical Allowance', latest.medicalAllowance],
+                    ['Special Allowance', latest.specialAllowance],
+                  ] as [string, number][]).filter(([, v]) => Number(v) > 0).map(([label, value]) => (
+                    <div key={label} className="flex justify-between items-center text-sm">
+                      <span className="text-slate-600 font-medium">{label}</span>
+                      <span className="font-bold text-slate-800">{formatCurrency(Number(value))}</span>
+                    </div>
+                  ))}
                 </div>
                 <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center text-sm">
                   <span className="font-bold text-slate-700">Gross Salary</span>
@@ -176,15 +299,17 @@ const SalaryTab: React.FC<SalaryTabProps> = ({
                   Deductions
                 </h4>
                 <div className="space-y-2">
-                  {BREAKDOWN_FIELDS.filter(f => f.type === 'deduction').map(field => {
-                    const value = Number(latest[field.key]) || 0;
-                    return (
-                      <div key={field.key} className="flex justify-between items-center text-sm">
-                        <span className="text-slate-600 font-medium">{field.label}</span>
-                        <span className="font-bold text-slate-800">{formatCurrency(value)}</span>
-                      </div>
-                    );
-                  })}
+                  {([
+                    ['PF', latest.pf],
+                    ['ESI', latest.esi],
+                    ['Tax / TDS', latest.tax],
+                    ['Other Deductions', latest.otherDeductions],
+                  ] as [string, number][]).filter(([, v]) => Number(v) > 0).map(([label, value]) => (
+                    <div key={label} className="flex justify-between items-center text-sm">
+                      <span className="text-slate-600 font-medium">{label}</span>
+                      <span className="font-bold text-slate-800">{formatCurrency(Number(value))}</span>
+                    </div>
+                  ))}
                 </div>
                 <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center text-sm">
                   <span className="font-bold text-slate-700">Total Deductions</span>
@@ -220,7 +345,7 @@ const SalaryTab: React.FC<SalaryTabProps> = ({
             Past Payslips
           </h3>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
-            {slips.length} {slips.length === 1 ? 'slip' : 'slips'} available
+            {filteredSlips.length} of {slips.length} {slips.length === 1 ? 'slip' : 'slips'} available
           </p>
         </div>
 
@@ -232,9 +357,14 @@ const SalaryTab: React.FC<SalaryTabProps> = ({
               Payslips appear after salary processing
             </p>
           </div>
+        ) : filteredSlips.length === 0 ? (
+          <div className="p-8 text-center">
+            <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-xs font-semibold text-slate-400">No payslips match the filters</p>
+          </div>
         ) : (
           <div className="p-4 space-y-2">
-            {slips.map(slip => (
+            {filteredSlips.map(slip => (
               <div
                 key={slip.id}
                 className="flex items-center justify-between p-4 rounded-2xl border border-orange-100/40 hover:border-brand-orange/30 hover:shadow-sm transition-all cursor-pointer bg-white"
@@ -265,9 +395,10 @@ const SalaryTab: React.FC<SalaryTabProps> = ({
       {selectedSlip && (
         <PayslipModal
           slip={selectedSlip}
-          employeeName={employeeName || ''}
-          employeeDepartment={employeeDepartment || ''}
-          employeePosition={employeePosition || ''}
+          employeeName={employeeName || employee?.name || ''}
+          employeeDepartment={employeeDepartment || employee?.department || ''}
+          employeePosition={employeePosition || employee?.position || ''}
+          employee={employee}
           onClose={() => setSelectedSlip(null)}
         />
       )}
@@ -282,85 +413,162 @@ interface PayslipModalProps {
   employeeName: string;
   employeeDepartment: string;
   employeePosition: string;
+  employee: EmployeeDetail | null;
   onClose: () => void;
 }
+
+const DetailRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="grid grid-cols-[124px_8px_1fr]">
+    <span>{label}</span>
+    <span>:</span>
+    <span className="font-medium">{value || '-'}</span>
+  </div>
+);
+
+const ProfessionalPayslip: React.FC<Omit<PayslipModalProps, 'onClose'> & { printRef: React.RefObject<HTMLDivElement> }> = ({
+  slip,
+  employeeName,
+  employeeDepartment,
+  employeePosition,
+  employee,
+  printRef,
+}) => {
+  const breakdown = normalizeBreakdown(slip.breakdownJson);
+  const earnings = sortEarningsForPayslip(breakdown.earnings);
+  const rowCount = Math.max(earnings.length, breakdown.deductions.length, 1);
+
+  return (
+    <div ref={printRef} className="payslip-container mx-auto max-w-[760px] bg-white px-7 py-6 font-sans text-black shadow-sm">
+      <header className="relative min-h-[112px] border-b border-black pb-3 text-center">
+        <img src={logoImg} alt="AFAC India" className="absolute left-0 top-1 h-[54px] w-[120px] object-contain" />
+        <div className="px-28 text-[11px] leading-[1.45]">
+          <h1 className="text-[16px] font-bold leading-tight">AMATO AUTOMOTIVE PRIVATE LIMITED</h1>
+          <p>D-135, SECTOR-63, NOIDA, GAUTAM BUDDHA NAGAR</p>
+          <p>UTTAR PRADESH-201301 INDIA</p>
+          <p>Contact : 7217045485</p>
+          <p>E-Mail : gauravaccounts@autoformindia.com</p>
+          <div className="inline-flex flex-col items-center">
+            <span>www.autoformindia.com/amatoautomotive.co.in</span>
+            <span className="mt-1.5 block h-px w-full bg-black" />
+          </div>
+        </div>
+      </header>
+
+      <section className="py-2 text-center leading-tight">
+        <h2 className="inline-flex flex-col items-center text-[15px] font-bold leading-tight">
+          <span>Pay Slip</span>
+          <span className="mt-1.5 block h-px w-full bg-black" />
+        </h2>
+        <p className="text-[11px]">for {formatMonth(slip.month)}</p>
+        <p className="mt-1 text-[14px] font-bold uppercase">{employeeName || '-'}</p>
+      </section>
+
+      <section className="grid grid-cols-2 gap-x-8 border-b border-black pb-4 text-[10px] leading-[1.55]">
+        <div>
+          <DetailRow label="Employee Number" value={employee?.employeeNumber} />
+          <DetailRow label="Department" value={employeeDepartment} />
+          <DetailRow label="Designation" value={employeePosition} />
+          <DetailRow label="Location" value="Noida" />
+          <DetailRow label="Bank Account No." value={employee?.bankAccountNumber} />
+          <DetailRow label="IFSC Code" value={employee?.bankIfscCode} />
+          <DetailRow label="Bank Branch" value={employee?.bankBranch} />
+          <DetailRow label="Date of Joining" value={formatDate(employee?.joinDate)} />
+        </div>
+        <div>
+          <DetailRow label="Tax Regime" value={employee?.taxRegime} />
+          <DetailRow label="PAN" value={employee?.panNumber} />
+          <DetailRow label="UAN" value={employee?.uanNumber} />
+          <DetailRow label="PF Account Number" value={employee?.pfAccountNumber} />
+          <DetailRow label="ESI Number" value={employee?.esiNumber} />
+          <DetailRow label="PRAN" value={employee?.pranNumber} />
+          <DetailRow label="Working Days" value={slip.workingDays} />
+          <DetailRow label="Days Present" value={slip.daysPresent} />
+        </div>
+      </section>
+
+      <div className="mt-5 grid grid-cols-[38%_12%_38%_12%] border-l border-t border-black text-[10px] leading-4">
+        <div className="border-b border-r border-black px-1.5 py-1.5 font-bold">Earnings</div>
+        <div className="border-b border-r border-black px-1.5 py-1.5 text-right font-bold">Amount</div>
+        <div className="border-b border-r border-black px-1.5 py-1.5 font-bold">Deductions</div>
+        <div className="border-b border-r border-black px-1.5 py-1.5 text-right font-bold">Amount</div>
+
+        {Array.from({ length: rowCount }).map((_, index) => {
+          const earning = earnings[index];
+          const deduction = breakdown.deductions[index];
+          return (
+            <React.Fragment key={index}>
+              <div className="border-r border-black px-1.5 py-1.5">{earning?.label || ''}</div>
+              <div className="border-r border-black px-1.5 py-1.5 text-right">{earning ? formatCurrency(earning.amount) : ''}</div>
+              <div className="border-r border-black px-1.5 py-1.5">{deduction?.label || ''}</div>
+              <div className="border-r border-black px-1.5 py-1.5 text-right">{deduction ? formatCurrency(deduction.amount) : ''}</div>
+            </React.Fragment>
+          );
+        })}
+
+        <div className="border-b border-r border-t border-black px-1.5 py-1.5 font-bold">Total Earnings</div>
+        <div className="border-b border-r border-t border-black px-1.5 py-1.5 text-right font-bold">{formatCurrency(slip.grossSalary)}</div>
+        <div className="border-b border-r border-t border-black px-1.5 py-1.5 font-bold">Total Deductions</div>
+        <div className="border-b border-r border-t border-black px-1.5 py-1.5 text-right font-bold">{formatCurrency(slip.totalDeductions)}</div>
+        <div className="col-span-2 border-b border-r border-black px-1.5 py-1.5"></div>
+        <div className="border-b border-r border-black px-1.5 py-1.5 font-bold">Net Amount</div>
+        <div className="border-b border-r border-black px-1.5 py-1.5 text-right font-bold">{formatCurrency(slip.netSalary)}</div>
+      </div>
+
+      <section className="mt-2 text-[10px] leading-relaxed">
+        <p className="font-semibold">Amount (in words):</p>
+        <p className="font-medium">INR {numberToIndianWords(Number(slip.netSalary))}</p>
+      </section>
+      <footer className="mt-5 text-center text-[10px] font-medium">This is a Computer Generated Pay Slip</footer>
+    </div>
+  );
+};
 
 const PayslipModal: React.FC<PayslipModalProps> = ({
   slip,
   employeeName,
   employeeDepartment,
   employeePosition,
+  employee,
   onClose,
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
 
-  const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      window.print();
-      return;
+  const handleDownload = async () => {
+    if (!printRef.current) return;
+    setDownloading(true);
+    try {
+      await document.fonts.ready;
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+      });
+      const imgData = canvas.toDataURL('image/png');
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const scale = Math.min(
+        (pageWidth - margin * 2) / canvas.width,
+        (pageHeight - margin * 2) / canvas.height,
+      );
+      const imgWidth = canvas.width * scale;
+      const imgHeight = canvas.height * scale;
+
+      pdf.addImage(imgData, 'PNG', (pageWidth - imgWidth) / 2, margin, imgWidth, imgHeight);
+      pdf.save(`Salary Slip - ${formatMonth(slip.month)}.pdf`);
+    } finally {
+      setDownloading(false);
     }
-
-    const content = printRef.current?.innerHTML || '';
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Salary Slip - ${formatMonth(slip.month)}</title>
-        <style>
-          @page { margin: 15mm; size: A4; }
-          body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #1e293b; }
-          .payslip { max-width: 800px; margin: 0 auto; border: 2px solid #e2e8f0; border-radius: 16px; padding: 32px; }
-          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f46617; padding-bottom: 16px; margin-bottom: 24px; }
-          .header-left { display: flex; align-items: center; gap: 12px; }
-          .header-left h1 { font-size: 18px; font-weight: 900; margin: 0; }
-          .header-left p { font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin: 2px 0 0; }
-          .header-right { text-align: right; }
-          .header-right h2 { font-size: 14px; font-weight: 900; margin: 0; }
-          .header-right p { font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; margin: 2px 0 0; }
-          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 32px; background: #f8fafc; padding: 16px; border-radius: 12px; margin-bottom: 24px; font-size: 13px; }
-          .info-grid .label { color: #64748b; font-weight: 600; }
-          .info-grid .value { font-weight: 700; text-align: right; }
-          .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
-          .col { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
-          .col h3 { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 12px; }
-          .col h3.earnings { color: #059669; }
-          .col h3.deductions { color: #dc2626; }
-          .row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
-          .row .lbl { color: #475569; font-weight: 500; }
-          .row .val { font-weight: 700; }
-          .total-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; padding: 8px 0 0; margin-top: 8px; border-top: 1px solid #e2e8f0; }
-          .net-section { background: linear-gradient(to right, #fff7ed, #fffbeb); border-top: 2px solid #f46617; margin: 0 -32px -32px; padding: 20px 32px; border-radius: 0 0 14px; display: flex; justify-content: space-between; align-items: center; }
-          .net-section .label { font-size: 16px; font-weight: 900; }
-          .net-section .value { font-size: 20px; font-weight: 900; color: #f46617; }
-          .footer { text-align: center; font-size: 10px; color: #94a3b8; font-weight: 600; margin-top: 20px; }
-        </style>
-      </head>
-      <body>
-        ${content}
-        <script>
-          window.onload = function() { window.print(); window.close(); };
-        <\/script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
   };
 
-  const breakdown: Record<string, number> = slip.breakdownJson || {};
-
-  const earningsTotal = BREAKDOWN_FIELDS
-    .filter(f => f.type === 'earning')
-    .reduce((sum, f) => sum + (Number(breakdown[f.key]) || 0), 0);
-
-  const deductionsTotal = BREAKDOWN_FIELDS
-    .filter(f => f.type === 'deduction')
-    .reduce((sum, f) => sum + (Number(breakdown[f.key]) || 0), 0);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 animate-fade-in">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
       <div className="relative bg-white rounded-[32px] border border-orange-100/60 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden animate-scale-in flex flex-col">
@@ -372,11 +580,12 @@ const PayslipModal: React.FC<PayslipModalProps> = ({
           </h3>
           <div className="flex items-center gap-2">
             <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-[#f46617] hover:bg-orange-600 text-white rounded-xl transition-all shadow-sm"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-[#f46617] hover:bg-orange-600 disabled:opacity-60 text-white rounded-xl transition-all shadow-sm"
             >
-              <Printer className="w-3.5 h-3.5" />
-              Print / PDF
+              {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              {downloading ? 'Generating...' : 'Download PDF'}
             </button>
             <button
               onClick={onClose}
@@ -388,102 +597,19 @@ const PayslipModal: React.FC<PayslipModalProps> = ({
         </div>
 
         {/* Payslip Content */}
-        <div className="flex-1 overflow-y-auto p-6" ref={printRef}>
-          <div className="payslip-container max-w-[700px] mx-auto">
-            {/* Header */}
-            <div className="flex justify-between items-start border-b-2 border-[#f46617] pb-4 mb-6">
-              <div className="flex items-center gap-3">
-                <img src={logoImg} alt="Logo" className="h-10 w-auto" />
-                <div>
-                  <h1 className="text-lg font-black text-slate-800 leading-tight">AUTOFORM INDIA</h1>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Salary Slip</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <h2 className="text-sm font-black text-slate-800">{formatMonth(slip.month)}</h2>
-                <p className="text-[10px] text-slate-500 font-semibold uppercase">Payslip</p>
-              </div>
-            </div>
-
-            {/* Employee Info */}
-            <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 bg-slate-50 p-4 rounded-2xl mb-6 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold text-xs">Name</span>
-                <span className="font-bold text-slate-800 text-xs">{employeeName || '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold text-xs">Department</span>
-                <span className="font-bold text-slate-800 text-xs">{employeeDepartment || '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold text-xs">Designation</span>
-                <span className="font-bold text-slate-800 text-xs">{employeePosition || '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold text-xs">Days Present</span>
-                <span className="font-bold text-slate-800 text-xs">{slip.daysPresent} / {slip.workingDays}</span>
-              </div>
-            </div>
-
-            {/* Earnings & Deductions Columns */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {/* Earnings */}
-              <div className="border border-slate-200 rounded-2xl p-4">
-                <h3 className="text-[11px] font-black text-emerald-600 uppercase tracking-wider mb-3">Earnings</h3>
-                <div className="space-y-1.5">
-                  {BREAKDOWN_FIELDS.filter(f => f.type === 'earning').map(field => {
-                    const value = Number(breakdown[field.key]) || 0;
-                    return (
-                      <div key={field.key} className="flex justify-between text-sm">
-                        <span className="text-slate-600 font-medium">{field.label}</span>
-                        <span className="font-bold text-slate-800">{formatCurrency(value)}</span>
-                      </div>
-                    );
-                  })}
-                  <div className="flex justify-between text-sm font-bold pt-2 mt-2 border-t border-slate-100">
-                    <span className="text-slate-700">Gross</span>
-                    <span className="text-slate-800">{formatCurrency(slip.grossSalary)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Deductions */}
-              <div className="border border-slate-200 rounded-2xl p-4">
-                <h3 className="text-[11px] font-black text-red-500 uppercase tracking-wider mb-3">Deductions</h3>
-                <div className="space-y-1.5">
-                  {BREAKDOWN_FIELDS.filter(f => f.type === 'deduction').map(field => {
-                    const value = Number(breakdown[field.key]) || 0;
-                    return (
-                      <div key={field.key} className="flex justify-between text-sm">
-                        <span className="text-slate-600 font-medium">{field.label}</span>
-                        <span className="font-bold text-slate-800">{formatCurrency(value)}</span>
-                      </div>
-                    );
-                  })}
-                  <div className="flex justify-between text-sm font-bold pt-2 mt-2 border-t border-slate-100">
-                    <span className="text-slate-700">Total Deductions</span>
-                    <span className="text-red-600">{formatCurrency(slip.totalDeductions)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Net Payable */}
-            <div className="bg-gradient-to-r from-orange-50 to-amber-50 border-t-2 border-[#f46617] -mx-6 -mb-6 px-6 py-5 rounded-b-[31px]">
-              <div className="flex justify-between items-center">
-                <span className="text-base font-black text-slate-800">Net Payable</span>
-                <span className="text-xl font-black text-[#f46617]">{formatCurrency(slip.netSalary)}</span>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-4">
-              This is a computer-generated slip
-            </p>
-          </div>
+        <div className="flex-1 overflow-y-auto bg-slate-100 p-5">
+          <ProfessionalPayslip
+            slip={slip}
+            employeeName={employeeName}
+            employeeDepartment={employeeDepartment}
+            employeePosition={employeePosition}
+            employee={employee}
+            printRef={printRef}
+          />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

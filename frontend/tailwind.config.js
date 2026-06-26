@@ -4,7 +4,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['"Exo 2"', 'system-ui', '-apple-system', 'sans-serif'],
+        script: ['"Great Vibes"', 'cursive'],
       },
       colors: {
         'brand-orange': '#FF8A00',

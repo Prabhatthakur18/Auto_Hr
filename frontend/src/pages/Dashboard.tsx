@@ -3,27 +3,55 @@ import { useAuth } from '../context/AuthContext';
 import LoginForm from '../components/LoginForm';
 import {
   Users, Calendar, Clock, DollarSign, Megaphone,
-  LogOut, Shield, ChevronRight,
+  LogOut, ChevronRight,
   Home, FileText, BarChart3, Loader2,
   CheckCircle, XCircle, MessageSquare, X, Send, AlertTriangle,
-  UserPlus, Search, Filter, RefreshCw, RotateCcw
+  UserPlus, Search, Filter, RefreshCw, RotateCcw, GraduationCap, Bell
 } from 'lucide-react';
 import {
   employeeApi,
   leaveApi,
   announcementApi,
+  heroBannerApi,
+  notificationApi,
   type Employee,
   type Leave,
   type Announcement,
+  type HeroBanner,
   type AuthUser,
   type UserRole,
+  type AppNotification,
 } from '../services/api';
 import { AttendancePanel } from '../components/AttendancePanel';
 import { ProfileDrawer } from '../components/ProfileDrawer';
+import { ProfileView } from './Profile';
 import { EmployeeAvatar } from '../components/EmployeeAvatar';
-import { DropdownSelect, type DropdownOption } from '../components/DropdownSelect';
+import { DropdownSelect } from '../components/DropdownSelect';
 import SalaryTab from '../components/tabs/SalaryTab';
-import logoImg from '../images/autologo-removebg-preview.png';
+import { PayrollImportPanel } from '../components/PayrollImportPanel';
+import { PayrollImportHistory } from '../components/PayrollImportHistory';
+import { AnnouncementSpotlight } from '../components/AnnouncementSpotlight';
+import { AnnouncementComposer } from '../components/AnnouncementComposer';
+import { AnnouncementDetailDialog } from '../components/AnnouncementDetailDialog';
+import { HeroBannerCarousel } from '../components/HeroBannerCarousel';
+import { HeroBannerComposer } from '../components/HeroBannerComposer';
+import { LearningCatalogPanel } from '../components/LearningCatalogPanel';
+import { MyLearningPanel } from '../components/MyLearningPanel';
+import { TeamLearningPanel } from '../components/TeamLearningPanel';
+import { LearningPathsPanel } from '../components/LearningPathsPanel';
+import { ILTSessionsPanel } from '../components/ILTSessionsPanel';
+import { BadgeCatalogPanel } from '../components/BadgeCatalogPanel';
+import { AdminLearningDashboard } from '../components/AdminLearningDashboard';
+import { DocumentManagerPanel } from '../components/DocumentManagerPanel';
+import { NotificationBell } from '../components/NotificationBell';
+import logoImg from '../images/autoform-logo.png';
+import {
+  EMPTY_PAGE_FILTERS,
+  matchesDateFilter,
+  matchesSearch,
+  type DateFilterMode,
+  type PageFilterState,
+} from '../utils/pageFilters';
 
 const ALL_ACCESS_ROLES: UserRole[] = ['HR', 'LEADERSHIP'];
 const MANAGEMENT_ROLES: UserRole[] = ['HR', 'LEADERSHIP', 'MANAGER'];
@@ -46,6 +74,11 @@ const Dashboard: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [unreadAnnouncementCount, setUnreadAnnouncementCount] = useState(0);
+  const [heroBanners, setHeroBanners] = useState<HeroBanner[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [focusAttendanceEmployeeId, setFocusAttendanceEmployeeId] = useState<number | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [profileDrawer, setProfileDrawer] = useState<{ open: boolean; employeeId: number | null; tab: 'about' | 'performance' | 'leaves' | 'attendance' }>({
     open: false,
@@ -59,13 +92,33 @@ const Dashboard: React.FC = () => {
     }
   }, [isLoggedIn]);
 
+  const refreshNotifications = async () => {
+    try {
+      const response = await notificationApi.list();
+      if (response.data) {
+        setNotifications(response.data.notifications);
+        setUnreadNotificationCount(response.data.unreadCount);
+      }
+    } catch {
+      // Keep notification refresh non-blocking.
+    }
+  };
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const interval = window.setInterval(refreshNotifications, 30_000);
+    return () => window.clearInterval(interval);
+  }, [isLoggedIn]);
+
   const loadDashboardData = async () => {
     setDataLoading(true);
     try {
-      const [empRes, leaveRes, annRes] = await Promise.allSettled([
+      const [empRes, leaveRes, annRes, heroRes, notificationRes] = await Promise.allSettled([
         employeeApi.list(),
         leaveApi.list(),
         announcementApi.list(),
+        heroBannerApi.list(),
+        notificationApi.list(),
       ]);
 
       if (empRes.status === 'fulfilled' && empRes.value.data) {
@@ -76,6 +129,14 @@ const Dashboard: React.FC = () => {
       }
       if (annRes.status === 'fulfilled' && annRes.value.data) {
         setAnnouncements(annRes.value.data.announcements);
+        setUnreadAnnouncementCount(annRes.value.data.unreadCount);
+      }
+      if (heroRes.status === 'fulfilled' && heroRes.value.data) {
+        setHeroBanners(heroRes.value.data.banners);
+      }
+      if (notificationRes.status === 'fulfilled' && notificationRes.value.data) {
+        setNotifications(notificationRes.value.data.notifications);
+        setUnreadNotificationCount(notificationRes.value.data.unreadCount);
       }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
@@ -101,19 +162,62 @@ const Dashboard: React.FC = () => {
   const role: UserRole = user?.role || 'EMPLOYEE';
   const name = user?.employee?.name || user?.username || 'User';
 
+  const handleOpenNotification = (notification: AppNotification) => {
+    switch (notification.type) {
+      case 'ATTENDANCE_CORRECTION':
+        setFocusAttendanceEmployeeId(notification.employeeId);
+        setActiveTab('attendance');
+        break;
+      case 'LEAVE_APPLIED':
+      case 'LEAVE_APPROVED':
+      case 'LEAVE_REJECTED':
+        setActiveTab('leaves');
+        break;
+      case 'SALARY_SLIP_READY':
+        setActiveTab('salary');
+        break;
+      case 'ANNOUNCEMENT_PUBLISHED':
+        setActiveTab('announcements');
+        break;
+      case 'COURSE_ASSIGNED':
+      case 'COURSE_DUE_REMINDER':
+      case 'COURSE_OVERDUE':
+      case 'COURSE_NUDGE':
+      case 'COURSE_CERTIFICATE_EXPIRING':
+      case 'PATH_ASSIGNED':
+      case 'COURSE_NOMINATED':
+      case 'COURSE_APPROVAL_REQUESTED':
+      case 'COURSE_APPROVAL_DECIDED':
+      case 'ILT_SESSION_CANCELLED':
+      case 'ILT_WAITLIST_PROMOTED':
+      case 'BADGE_EARNED':
+        setActiveTab('learning');
+        break;
+      case 'DOCUMENT_DOWNLOADED':
+        setActiveTab('documents');
+        break;
+      default:
+        setActiveTab('notifications');
+    }
+  };
+
   // Define sidebar navigation based on role
   const navItems = [
-    { id: 'overview', label: 'Overview', icon: Home },
+    { id: 'overview', label: 'Home', icon: Home },
     { id: 'employees', label: role === 'EMPLOYEE' ? 'My Profile' : 'Employees', icon: Users },
+    { id: 'announcements', label: 'Announcements', icon: Megaphone },
     { id: 'attendance', label: 'Attendance', icon: Clock },
     { id: 'leaves', label: 'Leaves', icon: Calendar },
     { id: 'salary', label: 'Salary', icon: DollarSign },
+    { id: 'documents', label: 'Documents', icon: FileText },
+    { id: 'learning', label: 'Learning', icon: GraduationCap },
     ...(ALL_ACCESS_ROLES.includes(role) ? [
       { id: 'reports', label: 'Reports', icon: BarChart3 },
     ] : []),
   ];
 
   const pendingLeaves = leaves.filter(l => l.status === 'PENDING').length;
+  const allDepartments = Array.from(new Set(employees.map(e => e.department).filter(Boolean))) as string[];
 
   return (
     <div className="min-h-screen bg-app-bg flex gap-4 p-4 lg:p-6 h-screen w-screen overflow-hidden relative font-sans">
@@ -125,8 +229,8 @@ const Dashboard: React.FC = () => {
       <aside className="w-72 bg-white rounded-[40px] border border-orange-100/60 shadow-island flex flex-col h-full relative z-10 overflow-hidden flex-shrink-0 animate-scale-in">
         {/* Logo */}
         <div className="p-6 border-b border-orange-100/70 flex flex-col items-center text-center">
-          <img src={logoImg} alt="Autoform Logo" className="h-12 w-auto mb-1 select-none" />
-          <h1 className="text-lg font-black tracking-tight text-slate-800 leading-none">Auto HR</h1>
+          <img src={logoImg} alt="Autoform Logo" className="w-44 h-auto mb-1 select-none" />
+          <h1 className="text-2xl font-script text-slate-800 leading-none">Autoform Connect</h1>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Autoform India</p>
         </div>
 
@@ -157,7 +261,10 @@ const Dashboard: React.FC = () => {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setFocusAttendanceEmployeeId(null);
+                }}
                 className={isActive ? 'nav-item-active' : 'nav-item'}
               >
                 <div className={`p-1 rounded-lg transition-colors ${isActive ? 'text-[#f46617]' : 'text-slate-400'}`}>
@@ -167,6 +274,11 @@ const Dashboard: React.FC = () => {
                 {item.id === 'leaves' && pendingLeaves > 0 && (
                   <span className="ml-auto bg-[#f46617] text-white text-[10px] font-black px-2 py-0.5 rounded-full">
                     {pendingLeaves}
+                  </span>
+                )}
+                {item.id === 'announcements' && unreadAnnouncementCount > 0 && (
+                  <span className="ml-auto bg-[#f46617] text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                    {unreadAnnouncementCount}
                   </span>
                 )}
               </button>
@@ -188,7 +300,16 @@ const Dashboard: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 bg-white rounded-[40px] border border-orange-100/60 shadow-island flex flex-col h-full overflow-hidden relative z-10 animate-scale-in">
-        <div className="flex-1 overflow-y-auto p-6 lg:p-8">
+        <div className="flex items-center justify-end px-6 lg:px-8 pt-5 flex-shrink-0">
+          <NotificationBell
+            notifications={notifications}
+            unreadCount={unreadNotificationCount}
+            onRefresh={refreshNotifications}
+            onViewAll={() => setActiveTab('notifications')}
+            onOpenNotification={handleOpenNotification}
+          />
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 lg:p-8 pt-2">
           {dataLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="w-8 h-8 text-[#f46617] animate-spin" />
@@ -203,18 +324,33 @@ const Dashboard: React.FC = () => {
                   pendingLeaves={pendingLeaves}
                   announcementCount={announcements.length}
                   announcements={announcements}
+                  heroBanners={heroBanners}
+                  onViewAllAnnouncements={() => setActiveTab('announcements')}
+                  onRefreshAnnouncements={loadDashboardData}
                 />
               )}
               {activeTab === 'employees' && (
-                <EmployeesPanel
-                  employees={employees}
-                  role={role}
-                  onRefresh={loadDashboardData}
-                  onOpenProfile={(employeeId: number) => setProfileDrawer({ open: true, employeeId, tab: 'about' })}
-                />
+                role === 'EMPLOYEE' && user?.employeeId ? (
+                  <ProfileView
+                    employeeId={user.employeeId}
+                    hideBack={true}
+                  />
+                ) : (
+                  <EmployeesPanel
+                    employees={employees}
+                    role={role}
+                    onRefresh={loadDashboardData}
+                    onOpenProfile={(employeeId: number) => setProfileDrawer({ open: true, employeeId, tab: 'about' })}
+                  />
+                )
               )}
               {activeTab === 'announcements' && (
-                <AnnouncementsPanel announcements={announcements} role={role} />
+                <AnnouncementsPanel
+                  announcements={announcements}
+                  role={role}
+                  departments={allDepartments}
+                  onRefresh={loadDashboardData}
+                />
               )}
               {activeTab === 'leaves' && (
                 <LeavesPanel
@@ -226,18 +362,27 @@ const Dashboard: React.FC = () => {
                 />
               )}
               {activeTab === 'attendance' && (
-                <AttendancePanel user={user} employees={employees} />
+                <AttendancePanel
+                  user={user}
+                  employees={employees}
+                  focusEmployeeId={focusAttendanceEmployeeId}
+                />
               )}
-              {activeTab === 'salary' && user?.employeeId && (
-                <div className="max-w-3xl mx-auto">
-                  <h2 className="text-2xl font-black text-slate-800 tracking-tight mb-6">My Salary</h2>
-                  <SalaryTab
-                    employeeId={user.employeeId}
-                    employeeName={user.employee?.name || ''}
-                    employeeDepartment={user.employee?.department || ''}
-                    employeePosition={user.employee?.position || ''}
-                  />
-                </div>
+              {activeTab === 'salary' && (
+                <SalaryPage role={role} user={user} />
+              )}
+              {activeTab === 'documents' && (
+                <DocumentManagerPanel role={role} currentEmployeeId={user?.employeeId ?? null} />
+              )}
+              {activeTab === 'learning' && (
+                <LearningPage role={role} user={user} departments={allDepartments} />
+              )}
+              {activeTab === 'notifications' && (
+                <NotificationsPanel
+                  notifications={notifications}
+                  onRefresh={refreshNotifications}
+                  onOpenNotification={handleOpenNotification}
+                />
               )}
               {activeTab === 'reports' && (
                 <ComingSoonPanel title="Reports" />
@@ -267,12 +412,38 @@ interface OverviewProps {
   pendingLeaves: number;
   announcementCount: number;
   announcements: Announcement[];
+  heroBanners: HeroBanner[];
+  onViewAllAnnouncements: () => void;
+  onRefreshAnnouncements: () => void;
 }
 
 const OverviewPanel: React.FC<OverviewProps> = ({
-  role, name, employeeCount, pendingLeaves, announcementCount, announcements
+  role, name, employeeCount, pendingLeaves, announcementCount, announcements, heroBanners, onViewAllAnnouncements, onRefreshAnnouncements
 }) => {
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  const [showHeroComposer, setShowHeroComposer] = useState(false);
   const greeting = new Date().getHours() < 12 ? 'Good Morning' : new Date().getHours() < 17 ? 'Good Afternoon' : 'Good Evening';
+
+  const handleOpenAnnouncement = async (ann: Announcement) => {
+    setSelectedAnnouncement(ann);
+    if (ann.isRead) return;
+    try {
+      await announcementApi.markRead(ann.id);
+      onRefreshAnnouncements();
+    } catch {
+      // non-critical
+    }
+  };
+
+  const handleDeleteHeroBanner = async (id: number) => {
+    if (!window.confirm('Remove this hero banner?')) return;
+    try {
+      await heroBannerApi.delete(id);
+      onRefreshAnnouncements();
+    } catch {
+      // non-critical
+    }
+  };
 
   const stats = role === 'EMPLOYEE' ? [
     { label: 'Pending Leaves', value: pendingLeaves, icon: Calendar, color: 'from-orange-400 to-[#f46617]' },
@@ -285,6 +456,13 @@ const OverviewPanel: React.FC<OverviewProps> = ({
 
   return (
     <div className="space-y-6">
+      <HeroBannerCarousel
+        banners={heroBanners}
+        role={role}
+        onAdd={() => setShowHeroComposer(true)}
+        onDelete={handleDeleteHeroBanner}
+      />
+
       <div className="mb-2">
         <h2 className="text-3xl font-black text-slate-800 tracking-tight leading-tight">{greeting}, {name}</h2>
         <p className="text-slate-500 font-semibold text-xs tracking-wider uppercase mt-1">Here's what's happening today</p>
@@ -305,35 +483,238 @@ const OverviewPanel: React.FC<OverviewProps> = ({
         ))}
       </div>
 
-      {/* Recent Announcements */}
-      {announcements.length > 0 && (
-        <div className="bg-white rounded-[32px] p-6 border border-orange-100/50 shadow-card">
-          <h3 className="text-lg font-black text-slate-800 tracking-tight mb-4 flex items-center gap-2">
-            <Megaphone className="w-5 h-5 text-[#f46617]" />
-            Recent Announcements
-          </h3>
-          <div className="space-y-3">
-            {announcements.slice(0, 3).map(ann => (
-              <div key={ann.id} className="flex items-start gap-3 p-4 rounded-2xl bg-orange-50/20 hover:bg-orange-50/55 border border-orange-100/30 transition-all duration-200">
-                <span className={`inline-block w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
-                  ann.priority === 'URGENT' ? 'bg-red-500 shadow-sm shadow-red-500/35' :
-                  ann.priority === 'HIGH' ? 'bg-orange-500 shadow-sm shadow-orange-500/35' :
-                  ann.priority === 'MEDIUM' ? 'bg-amber-500 shadow-sm shadow-amber-500/35' : 'bg-slate-300'
-                }`} />
-                <div>
-                  <p className="text-sm font-bold text-slate-800 leading-snug">{ann.title}</p>
-                  {ann.content && (
-                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">{ann.content}</p>
-                  )}
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2">
-                    {new Date(ann.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </p>
-                </div>
-              </div>
+      <AnnouncementSpotlight
+        announcements={announcements}
+        onViewAll={onViewAllAnnouncements}
+        onOpenAnnouncement={handleOpenAnnouncement}
+      />
+
+      {selectedAnnouncement && (
+        <AnnouncementDetailDialog
+          announcement={selectedAnnouncement}
+          onClose={() => setSelectedAnnouncement(null)}
+        />
+      )}
+
+      {showHeroComposer && (
+        <HeroBannerComposer
+          onClose={() => setShowHeroComposer(false)}
+          onCreated={() => {
+            setShowHeroComposer(false);
+            onRefreshAnnouncements();
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─── Salary Page (tabbed: Import / History / My Salary) ──────
+
+type SalarySubTab = 'import' | 'history' | 'my-salary';
+
+const PageFilterBar: React.FC<{
+  filters: PageFilterState;
+  onChange: (filters: PageFilterState) => void;
+  searchPlaceholder: string;
+}> = ({ filters, onChange, searchPlaceholder }) => {
+  const update = (patch: Partial<PageFilterState>) => onChange({ ...filters, ...patch });
+  const setMode = (dateMode: DateFilterMode) => {
+    onChange({
+      ...filters,
+      dateMode,
+      date: dateMode === 'DATE' ? filters.date : '',
+      month: dateMode === 'MONTH' ? filters.month : '',
+      year: dateMode === 'YEAR' ? filters.year : '',
+    });
+  };
+
+  return (
+    <div className="space-y-3 mb-6">
+      <div className="relative">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          value={filters.search}
+          onChange={e => update({ search: e.target.value })}
+          placeholder={searchPlaceholder}
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-orange-100 rounded-2xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-sm transition-all"
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {(['ALL', 'DATE', 'MONTH', 'YEAR'] as const).map(mode => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setMode(mode)}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              filters.dateMode === mode
+                ? 'bg-[#f46617] text-white shadow-sm shadow-orange-500/30'
+                : 'bg-orange-50/60 text-slate-500 hover:bg-orange-50'
+            }`}
+          >
+            {mode !== 'ALL' && <Calendar className="w-3.5 h-3.5" />}
+            {mode === 'ALL' ? 'All Dates' : mode === 'DATE' ? 'Date' : mode === 'MONTH' ? 'Month' : 'Year'}
+          </button>
+        ))}
+
+        {filters.dateMode === 'DATE' && (
+          <input
+            type="date"
+            value={filters.date}
+            onChange={e => update({ date: e.target.value })}
+            className="px-3 py-2 bg-white border border-orange-100 rounded-xl text-slate-700 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-sm"
+          />
+        )}
+        {filters.dateMode === 'MONTH' && (
+          <input
+            type="month"
+            value={filters.month}
+            onChange={e => update({ month: e.target.value })}
+            className="px-3 py-2 bg-white border border-orange-100 rounded-xl text-slate-700 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-sm"
+          />
+        )}
+        {filters.dateMode === 'YEAR' && (
+          <input
+            type="number"
+            min="1900"
+            max="2100"
+            value={filters.year}
+            onChange={e => update({ year: e.target.value })}
+            placeholder="Year"
+            className="w-28 px-3 py-2 bg-white border border-orange-100 rounded-xl text-slate-700 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-sm"
+          />
+        )}
+
+        {(filters.search || filters.dateMode !== 'ALL' || filters.date || filters.month || filters.year) && (
+          <button
+            type="button"
+            onClick={() => onChange(EMPTY_PAGE_FILTERS)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 transition-colors"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const SalaryPage: React.FC<{ role: UserRole; user: AuthUser | null }> = ({ role, user }) => {
+  const isHR = role === 'HR';
+  const [subTab, setSubTab] = useState<SalarySubTab>(isHR ? 'import' : 'my-salary');
+  const [filters, setFilters] = useState<PageFilterState>(EMPTY_PAGE_FILTERS);
+
+  const tabs: { id: SalarySubTab; label: string }[] = [
+    ...(isHR ? [
+      { id: 'import' as const, label: 'Import' },
+      { id: 'history' as const, label: 'History' },
+    ] : []),
+    ...(user?.employeeId ? [{ id: 'my-salary' as const, label: 'My Salary' }] : []),
+  ];
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Salary</h2>
+        {tabs.length > 1 && (
+          <div className="flex bg-orange-50/60 p-1.5 rounded-2xl border border-orange-100/50">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setSubTab(tab.id)}
+                className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                  subTab === tab.id
+                    ? 'bg-white text-[#f46617] shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {tab.label}
+              </button>
             ))}
           </div>
-        </div>
+        )}
+      </div>
+
+      <PageFilterBar
+        filters={filters}
+        onChange={setFilters}
+        searchPlaceholder="Search salary slips, payroll files, amounts, dates..."
+      />
+
+      {subTab === 'import' && isHR && <PayrollImportPanel />}
+      {subTab === 'history' && isHR && <PayrollImportHistory filters={filters} />}
+      {subTab === 'my-salary' && user?.employeeId && (
+        <SalaryTab
+          employeeId={user.employeeId}
+          employeeName={user.employee?.name || ''}
+          employeeDepartment={user.employee?.department || ''}
+          employeePosition={user.employee?.position || ''}
+          filters={filters}
+        />
       )}
+    </div>
+  );
+};
+
+// ─── Learning Page (tabbed: Catalog / My Learning / Team / Overview) ─
+
+type LearningSubTab = 'catalog' | 'paths' | 'ilt' | 'badges' | 'my-learning' | 'team' | 'overview';
+
+const LearningPage: React.FC<{ role: UserRole; user: AuthUser | null; departments: string[] }> = ({ role, user, departments }) => {
+  const isManagement = MANAGEMENT_ROLES.includes(role);
+  const isAdmin = ALL_ACCESS_ROLES.includes(role);
+  const [subTab, setSubTab] = useState<LearningSubTab>('catalog');
+  const [filters, setFilters] = useState<PageFilterState>(EMPTY_PAGE_FILTERS);
+
+  const tabs: { id: LearningSubTab; label: string }[] = [
+    { id: 'catalog', label: 'Catalog' },
+    { id: 'paths', label: 'Paths' },
+    { id: 'ilt', label: 'Live Training' },
+    { id: 'badges', label: 'Badges' },
+    ...(user?.employeeId ? [{ id: 'my-learning' as const, label: 'My Learning' }] : []),
+    ...(isManagement ? [{ id: 'team' as const, label: 'Team' }] : []),
+    ...(isAdmin ? [{ id: 'overview' as const, label: 'Overview' }] : []),
+  ];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Learning</h2>
+        {tabs.length > 1 && (
+          <div className="flex bg-orange-50/60 p-1.5 rounded-2xl border border-orange-100/50">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setSubTab(tab.id)}
+                className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                  subTab === tab.id
+                    ? 'bg-white text-[#f46617] shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <PageFilterBar
+        filters={filters}
+        onChange={setFilters}
+        searchPlaceholder="Search courses, paths, sessions, employees, badges, departments..."
+      />
+
+      {subTab === 'catalog' && <LearningCatalogPanel role={role} departments={departments} filters={filters} />}
+      {subTab === 'paths' && <LearningPathsPanel role={role} departments={departments} filters={filters} />}
+      {subTab === 'ilt' && <ILTSessionsPanel role={role} departments={departments} filters={filters} />}
+      {subTab === 'badges' && <BadgeCatalogPanel role={role} filters={filters} />}
+      {subTab === 'my-learning' && user?.employeeId && <MyLearningPanel filters={filters} />}
+      {subTab === 'team' && isManagement && <TeamLearningPanel filters={filters} />}
+      {subTab === 'overview' && isAdmin && <AdminLearningDashboard filters={filters} />}
     </div>
   );
 };
@@ -364,6 +745,13 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
   const [avatarUrl, setAvatarUrl] = useState('');
   const [employeeType, setEmployeeType] = useState('Full-time');
   const [tallyLedgerName, setTallyLedgerName] = useState('');
+  const [employeeNumber, setEmployeeNumber] = useState('');
+  const [panNumber, setPanNumber] = useState('');
+  const [uanNumber, setUanNumber] = useState('');
+  const [pfAccountNumber, setPfAccountNumber] = useState('');
+  const [esiNumber, setEsiNumber] = useState('');
+  const [pranNumber, setPranNumber] = useState('');
+  const [taxRegime, setTaxRegime] = useState('');
   const [createUser, setCreateUser] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -384,7 +772,9 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
   const [error, setError] = useState('');
 
   // Extract unique departments for filtering
-  const departments = ['ALL', ...Array.from(new Set(employees.map(e => e.department).filter(Boolean)))];
+  const departments = ['ALL', ...Array.from(new Set(
+    employees.map(e => e.department).filter((d): d is string => Boolean(d))
+  ))];
 
   // Filtered employees
   const filteredEmployees = employees.filter(emp => {
@@ -408,6 +798,13 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
     setAvatarUrl('');
     setEmployeeType('Full-time');
     setTallyLedgerName('');
+    setEmployeeNumber('');
+    setPanNumber('');
+    setUanNumber('');
+    setPfAccountNumber('');
+    setEsiNumber('');
+    setPranNumber('');
+    setTaxRegime('');
     setCreateUser(false);
     setUsername('');
     setPassword('');
@@ -494,6 +891,13 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
         avatar: avatarUrl || undefined,
         employeeType: employeeType || undefined,
         tallyLedgerName: tallyLedgerName || undefined,
+        employeeNumber: employeeNumber || undefined,
+        panNumber: panNumber || undefined,
+        uanNumber: uanNumber || undefined,
+        pfAccountNumber: pfAccountNumber || undefined,
+        esiNumber: esiNumber || undefined,
+        pranNumber: pranNumber || undefined,
+        taxRegime: taxRegime || undefined,
         biometricId: biometricId ? parseInt(biometricId, 10) : undefined,
         managerId: managerId ? parseInt(managerId, 10) : undefined,
       };
@@ -526,7 +930,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
     try {
       const res = await employeeApi.syncMasterData();
       if (res.success) {
-        await onRefresh();
+        onRefresh();
       }
     } catch (err: any) {
       setError(err.message || 'Failed to sync master employee data');
@@ -589,7 +993,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
           placeholder="All Departments"
           variant="filter"
           leadingIcon={<Filter className="w-4 h-4" />}
-          className="min-w-[160px]"
+          className="w-full sm:w-[200px] flex-shrink-0"
           options={departments.map(d => ({
             value: d || 'ALL',
             label: d === 'ALL' ? 'All Departments' : d,
@@ -797,6 +1201,108 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
                   />
                 </div>
 
+                <div className="sm:col-span-2 pt-2 border-t border-orange-100/60">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Payroll & Statutory Details</p>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Employee Number
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeNumber}
+                    onChange={e => setEmployeeNumber(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. Afac10375"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Tax Regime
+                  </label>
+                  <input
+                    type="text"
+                    value={taxRegime}
+                    onChange={e => setTaxRegime(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. Regular Tax Regime"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    PAN Number
+                  </label>
+                  <input
+                    type="text"
+                    value={panNumber}
+                    onChange={e => setPanNumber(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. IRLPK0350R"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    UAN Number
+                  </label>
+                  <input
+                    type="text"
+                    value={uanNumber}
+                    onChange={e => setUanNumber(e.target.value)}
+                    disabled={submitting}
+                    placeholder="Universal Account Number"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    PF Account Number
+                  </label>
+                  <input
+                    type="text"
+                    value={pfAccountNumber}
+                    onChange={e => setPfAccountNumber(e.target.value)}
+                    disabled={submitting}
+                    placeholder="e.g. 1021632"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    ESI Number
+                  </label>
+                  <input
+                    type="text"
+                    value={esiNumber}
+                    onChange={e => setEsiNumber(e.target.value)}
+                    disabled={submitting}
+                    placeholder="ESI account number"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    PR Account Number (PRAN)
+                  </label>
+                  <input
+                    type="text"
+                    value={pranNumber}
+                    onChange={e => setPranNumber(e.target.value)}
+                    disabled={submitting}
+                    placeholder="Pension Account Number"
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400 bg-white"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
                     Email Address
@@ -958,42 +1464,296 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
 
 // ─── Announcements Panel ─────────────────────────────────────
 
-const AnnouncementsPanel: React.FC<{ announcements: Announcement[]; role: UserRole }> = ({ announcements }) => (
-  <div className="space-y-6">
-    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Announcements</h2>
-    {announcements.length === 0 ? (
-      <div className="text-center py-16 text-slate-400 bg-white rounded-3xl border border-orange-100/50 shadow-card">
-        <Megaphone className="w-12 h-12 mx-auto mb-3 opacity-50 text-slate-400" />
-        <p className="font-semibold">No announcements yet</p>
+const NotificationsPanel: React.FC<{
+  notifications: AppNotification[];
+  onRefresh: () => void;
+  onOpenNotification: (notification: AppNotification) => void;
+}> = ({ notifications, onRefresh, onOpenNotification }) => {
+  const unreadCount = notifications.filter(notification => !notification.readAt).length;
+  const handleOpen = async (notification: AppNotification) => {
+    if (!notification.readAt) {
+      await notificationApi.markRead(notification.id);
+      onRefresh();
+    }
+    onOpenNotification(notification);
+  };
+  const markAllRead = async () => {
+    await notificationApi.markAllRead();
+    onRefresh();
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Notifications</h2>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">Attendance updates and system alerts</p>
+        </div>
+        {unreadCount > 0 && <button type="button" onClick={markAllRead} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-2xl">Mark All Read</button>}
       </div>
-    ) : (
-      <div className="space-y-4">
-        {announcements.map(ann => (
-          <div key={ann.id} className="bg-white rounded-3xl p-6 border border-orange-100/50 shadow-card">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full mb-3 ${
-                  ann.priority === 'URGENT' ? 'bg-red-50 text-red-600 border border-red-100' :
-                  ann.priority === 'HIGH' ? 'bg-orange-50 text-[#f46617] border border-orange-100' :
-                  ann.priority === 'MEDIUM' ? 'bg-blue-50 text-blue-605 border border-blue-100' : 'bg-slate-50 text-slate-500 border border-slate-100'
-                }`}>
-                  {ann.priority}
-                </span>
-                <h3 className="text-lg font-bold text-slate-800 leading-snug">{ann.title}</h3>
-                {ann.content && <p className="text-sm text-slate-600 mt-2.5 leading-relaxed">{ann.content}</p>}
+      {notifications.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-3xl border border-orange-100/50 shadow-card text-slate-400">
+          <Bell className="w-12 h-12 mx-auto mb-3 opacity-40" />
+          <p className="font-semibold">No notifications yet</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {notifications.map(notification => (
+            <button type="button" key={notification.id} onClick={() => handleOpen(notification)} className={`w-full text-left rounded-3xl border p-5 shadow-card transition-all ${notification.readAt ? 'bg-white border-orange-100/50' : 'bg-orange-50/40 border-orange-200'}`}>
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 p-2 rounded-xl bg-white border border-orange-100 text-[#f46617]"><Clock className="w-4 h-4" /></div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black text-slate-800">{notification.title}</h3>
+                    {!notification.readAt && <span className="w-2 h-2 rounded-full bg-[#f46617]" />}
+                  </div>
+                  <p className="text-sm text-slate-600 mt-1 leading-relaxed">{notification.message}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-3">{new Date(notification.createdAt).toLocaleString('en-IN')}</p>
+                </div>
               </div>
-            </div>
-            <div className="mt-5 flex items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-wider border-t border-orange-100/30 pt-4">
-              <span>By {ann.createdBy?.username || 'Admin'}</span>
-              <span>•</span>
-              <span>{new Date(ann.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-            </div>
-          </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PRIORITY_LABELS: Record<Announcement['priority'], string> = {
+  LOW: 'Normal',
+  MEDIUM: 'Important',
+  HIGH: 'High Priority',
+  URGENT: 'Urgent',
+};
+
+const READ_FILTERS = ['ALL', 'UNREAD', 'READ'] as const;
+type ReadFilter = typeof READ_FILTERS[number];
+
+const AnnouncementsPanel: React.FC<{
+  announcements: Announcement[];
+  role: UserRole;
+  departments: string[];
+  onRefresh: () => void;
+}> = ({ announcements, role, departments, onRefresh }) => {
+  const [showComposer, setShowComposer] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [readFilter, setReadFilter] = useState<ReadFilter>('ALL');
+  const [priorityFilter, setPriorityFilter] = useState<'ALL' | Announcement['priority']>('ALL');
+  const [markingAllRead, setMarkingAllRead] = useState(false);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  const [filters, setFilters] = useState<PageFilterState>(EMPTY_PAGE_FILTERS);
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Remove this announcement?')) return;
+    setDeletingId(id);
+    try {
+      await announcementApi.delete(id);
+      onRefresh();
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleOpen = async (ann: Announcement) => {
+    setSelectedAnnouncement(ann);
+    if (ann.isRead) return;
+    try {
+      await announcementApi.markRead(ann.id);
+      onRefresh();
+    } catch {
+      // non-critical
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    setMarkingAllRead(true);
+    try {
+      await announcementApi.markAllRead();
+      onRefresh();
+    } finally {
+      setMarkingAllRead(false);
+    }
+  };
+
+  const filtered = announcements.filter(ann => {
+    if (readFilter === 'UNREAD' && ann.isRead) return false;
+    if (readFilter === 'READ' && !ann.isRead) return false;
+    if (priorityFilter !== 'ALL' && ann.priority !== priorityFilter) return false;
+    if (!matchesSearch(filters.search, [
+      ann.title,
+      ann.content,
+      ann.priority,
+      PRIORITY_LABELS[ann.priority],
+      ann.targetDepartment,
+      ann.createdBy?.username,
+      ann.media?.map(m => `${m.type} ${m.caption ?? ''} ${m.url}`).join(' '),
+    ])) return false;
+    if (!matchesDateFilter(filters, [ann.publishedAt, ann.scheduledAt, ann.createdAt, ann.expiresAt])) return false;
+    return true;
+  });
+
+  const unreadCount = announcements.filter(a => !a.isRead).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Company Announcements</h2>
+        <div className="flex items-center gap-3">
+          {unreadCount > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              disabled={markingAllRead}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-700 text-xs font-bold rounded-2xl transition-all"
+            >
+              {markingAllRead ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+              Mark All Read
+            </button>
+          )}
+          {role === 'HR' && (
+            <button
+              onClick={() => setShowComposer(true)}
+              className="btn-orange px-4 py-2.5 text-xs font-bold rounded-2xl"
+            >
+              <Megaphone className="w-4 h-4" /> New Announcement
+            </button>
+          )}
+        </div>
+      </div>
+
+      <PageFilterBar
+        filters={filters}
+        onChange={setFilters}
+        searchPlaceholder="Search announcements, content, priority, department, creator..."
+      />
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        {READ_FILTERS.map(f => (
+          <button
+            key={f}
+            onClick={() => setReadFilter(f)}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              readFilter === f ? 'bg-[#f46617] text-white shadow-sm shadow-orange-500/30' : 'bg-orange-50/60 text-slate-500 hover:bg-orange-50'
+            }`}
+          >
+            {f === 'ALL' ? 'All' : f === 'UNREAD' ? 'Unread' : 'Read'}
+          </button>
+        ))}
+        <span className="w-px h-5 bg-orange-100 mx-1" />
+        {(['ALL', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const).map(p => (
+          <button
+            key={p}
+            onClick={() => setPriorityFilter(p)}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              priorityFilter === p ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            {p === 'ALL' ? 'All Priorities' : PRIORITY_LABELS[p]}
+          </button>
         ))}
       </div>
-    )}
-  </div>
-);
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 text-slate-400 bg-white rounded-3xl border border-orange-100/50 shadow-card">
+          <Megaphone className="w-12 h-12 mx-auto mb-3 opacity-50 text-slate-400" />
+          <p className="font-semibold">No announcements right now. Check back soon.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filtered.map(ann => (
+            <div
+              key={ann.id}
+              onClick={() => handleOpen(ann)}
+              className={`bg-white rounded-3xl p-6 border shadow-card cursor-pointer transition-all ${
+                ann.isRead ? 'border-orange-100/50' : 'border-orange-300/60 ring-1 ring-orange-100'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-3">
+                    {!ann.isRead && (
+                      <span className="w-2 h-2 rounded-full bg-[#f46617] flex-shrink-0" title="Unread" />
+                    )}
+                    <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                      ann.priority === 'URGENT' ? 'bg-red-50 text-red-600 border border-red-100' :
+                      ann.priority === 'HIGH' ? 'bg-orange-50 text-[#f46617] border border-orange-100' :
+                      ann.priority === 'MEDIUM' ? 'bg-blue-50 text-blue-605 border border-blue-100' : 'bg-slate-50 text-slate-500 border border-slate-100'
+                    }`}>
+                      {PRIORITY_LABELS[ann.priority]}
+                    </span>
+                    {ann.isPinned && (
+                      <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
+                        Pinned
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800 leading-snug">{ann.title}</h3>
+                  {ann.content && <p className="text-sm text-slate-600 mt-2.5 leading-relaxed whitespace-pre-line">{ann.content}</p>}
+                </div>
+                {role === 'HR' && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDelete(ann.id); }}
+                    disabled={deletingId === ann.id}
+                    className="p-2 rounded-xl hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors flex-shrink-0"
+                    title="Remove announcement"
+                  >
+                    {deletingId === ann.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+
+              {ann.media && ann.media.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+                  {ann.media.map(m => (
+                    <div key={m.id} className="rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 aspect-video">
+                      {m.type === 'IMAGE' && <img src={m.url} alt="" className="w-full h-full object-cover" />}
+                      {m.type === 'VIDEO_FILE' && <video src={m.url} controls className="w-full h-full object-cover" />}
+                      {(m.type === 'VIDEO_EMBED' || m.type === 'SOCIAL_EMBED' || m.type === 'LINK') && (
+                        <a
+                          href={m.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full h-full flex items-center justify-center bg-slate-800 text-white text-xs font-bold gap-1.5 hover:bg-slate-700 transition-colors"
+                        >
+                          View Linked Content
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-5 flex items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-wider border-t border-orange-100/30 pt-4">
+                <span>By {ann.createdBy?.username || 'HR'}</span>
+                <span>•</span>
+                <span>{new Date(ann.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showComposer && (
+        <AnnouncementComposer
+          departments={departments}
+          onClose={() => setShowComposer(false)}
+          onCreated={() => {
+            setShowComposer(false);
+            onRefresh();
+          }}
+        />
+      )}
+
+      {selectedAnnouncement && (
+        <AnnouncementDetailDialog
+          announcement={selectedAnnouncement}
+          onClose={() => setSelectedAnnouncement(null)}
+        />
+      )}
+    </div>
+  );
+};
 
 // ─── Leaves Panel ────────────────────────────────────────────
 
@@ -1264,8 +2024,9 @@ const LeavesPanel: React.FC<{
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-6 mb-5">
-        <div className="relative xl:col-span-2">
+      <div className="space-y-3 mb-5">
+        {/* Search */}
+        <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
@@ -1276,67 +2037,71 @@ const LeavesPanel: React.FC<{
           />
         </div>
 
-        <DropdownSelect
-          value={departmentFilter}
-          onChange={setDepartmentFilter}
-          placeholder="All Departments"
-          variant="filter"
-          leadingIcon={<Filter className="w-4 h-4" />}
-          options={[
-            { value: 'ALL', label: 'All Departments' },
-            ...departmentOptions.map(dept => ({ value: dept, label: dept })),
-          ]}
-        />
-
-        <DropdownSelect
-          value={managerFilter}
-          onChange={setManagerFilter}
-          placeholder="All Managers"
-          variant="filter"
-          leadingIcon={<Filter className="w-4 h-4" />}
-          options={[
-            { value: 'ALL', label: 'All Managers' },
-            ...managerOptions.map(manager => ({ value: String(manager.id), label: manager.name })),
-          ]}
-        />
-
-        <DropdownSelect
-          value={leaveTypeFilter}
-          onChange={setLeaveTypeFilter}
-          placeholder="All Leave Types"
-          variant="filter"
-          leadingIcon={<Filter className="w-4 h-4" />}
-          options={[
-            { value: 'ALL', label: 'All Leave Types' },
-            ...leaveTypeOptions.map(type => ({ value: type, label: type })),
-          ]}
-        />
-
-        <div className="grid grid-cols-2 gap-2 xl:col-span-2">
-          <input
-            type="date"
-            value={dateFromFilter}
-            onChange={e => setDateFromFilter(e.target.value)}
-            className="w-full px-3 py-2.5 bg-white border border-orange-100 rounded-2xl text-slate-700 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-sm"
-            title="From date"
+        {/* Filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_minmax(160px,1fr)_minmax(270px,1.2fr)_auto] gap-3 items-center">
+          <DropdownSelect
+            value={departmentFilter}
+            onChange={setDepartmentFilter}
+            placeholder="All Departments"
+            variant="filterCompact"
+            leadingIcon={<Filter className="w-4 h-4" />}
+            options={[
+              { value: 'ALL', label: 'All Departments' },
+              ...departmentOptions.map(dept => ({ value: dept, label: dept })),
+            ]}
           />
-          <input
-            type="date"
-            value={dateToFilter}
-            onChange={e => setDateToFilter(e.target.value)}
-            className="w-full px-3 py-2.5 bg-white border border-orange-100 rounded-2xl text-slate-700 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-sm"
-            title="To date"
+
+          <DropdownSelect
+            value={managerFilter}
+            onChange={setManagerFilter}
+            placeholder="All Managers"
+            variant="filterCompact"
+            leadingIcon={<Filter className="w-4 h-4" />}
+            options={[
+              { value: 'ALL', label: 'All Managers' },
+              ...managerOptions.map(manager => ({ value: String(manager.id), label: manager.name })),
+            ]}
           />
+
+          <DropdownSelect
+            value={leaveTypeFilter}
+            onChange={setLeaveTypeFilter}
+            placeholder="All Leave Types"
+            variant="filterCompact"
+            leadingIcon={<Filter className="w-4 h-4" />}
+            options={[
+              { value: 'ALL', label: 'All Leave Types' },
+              ...leaveTypeOptions.map(type => ({ value: type, label: type })),
+            ]}
+          />
+
+          <div className="flex items-center gap-1.5 sm:col-span-2 xl:col-span-1">
+            <input
+              type="date"
+              value={dateFromFilter}
+              onChange={e => setDateFromFilter(e.target.value)}
+              className="w-full min-w-0 px-2.5 py-2 bg-white border border-orange-100 rounded-2xl text-slate-700 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-sm min-h-[44px]"
+              title="From date"
+            />
+            <span className="text-slate-300 text-xs font-bold flex-shrink-0">-</span>
+            <input
+              type="date"
+              value={dateToFilter}
+              onChange={e => setDateToFilter(e.target.value)}
+              className="w-full min-w-0 px-2.5 py-2 bg-white border border-orange-100 rounded-2xl text-slate-700 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-sm min-h-[44px]"
+              title="To date"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold text-xs px-3 py-2 rounded-2xl border border-slate-200 transition-colors min-h-[44px] w-full sm:w-fit xl:w-auto"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reset
+          </button>
         </div>
-
-        <button
-          type="button"
-          onClick={clearFilters}
-          className="flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold text-xs px-4 py-2.5 rounded-2xl border border-slate-200 transition-colors xl:col-span-1"
-        >
-          <RotateCcw className="w-4 h-4" />
-          Reset
-        </button>
       </div>
 
       {/* Category Tabs for Management */}

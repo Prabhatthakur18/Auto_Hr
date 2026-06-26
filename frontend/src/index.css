@@ -14,7 +14,7 @@
   body {
     background-color: var(--app-bg);
     color: rgb(30 41 59); /* slate-800 */
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Exo 2', system-ui, -apple-system, sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
   }

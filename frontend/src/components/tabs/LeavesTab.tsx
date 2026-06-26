@@ -60,7 +60,7 @@ const fmtDisplay = (d: string) =>
 
 /* ─── Main Component ───────────────────────────────────────── */
 
-const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR, onRefresh, theme = 'dark' }) => {
+const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, onRefresh, theme = 'dark' }) => {
   const { user } = useAuth();
   const isOwnProfile = user?.employeeId === employee.id;
   const isLight = theme === 'light';

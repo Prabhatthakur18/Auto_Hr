@@ -19,6 +19,20 @@ model User {
   announcements  Announcement[]
   approvedLeaves Leave[]        @relation("ApprovedBy")
   employee       Employee?      @relation(fields: [employeeId], references: [id])
+  announcementReads AnnouncementRead[]
+  heroBanners    HeroBanner[]
+  passwordResetOtps PasswordResetOtp[]
+  payrollImportLogs PayrollImportLog[]
+  coursesCreated    Course[]
+  enrollmentsAssigned Enrollment[] @relation("EnrollmentAssignedBy")
+  learningPathsCreated LearningPath[]
+  pathEnrollmentsAssigned PathEnrollment[] @relation("PathEnrollmentAssignedBy")
+  iltSessionsCreated   ILTSession[]
+  badgesCreated        Badge[]
+  notifications       Notification[] @relation("NotificationRecipient")
+  attendanceCorrections AttendanceCorrection[] @relation("AttendanceCorrectionEditor")
+  employeeDocumentsUploaded EmployeeDocument[]
+  documentDownloads   EmployeeDocumentDownload[]
 
   @@map("users")
 }
@@ -41,6 +55,16 @@ model Employee {
   education        String?           @db.VarChar(255)
   employeeType     String?           @map("employee_type") @db.VarChar(50)
   tallyLedgerName  String?           @map("tally_ledger_name") @db.VarChar(200)
+  employeeNumber   String?           @map("employee_number") @db.VarChar(50)
+  panNumber        String?           @map("pan_number") @db.VarChar(20)
+  uanNumber        String?           @map("uan_number") @db.VarChar(20)
+  pfAccountNumber  String?           @map("pf_account_number") @db.VarChar(50)
+  esiNumber        String?           @map("esi_number") @db.VarChar(50)
+  pranNumber       String?           @map("pran_number") @db.VarChar(50)
+  taxRegime        String?           @map("tax_regime") @db.VarChar(50)
+  bankAccountNumber String?          @map("bank_account_number") @db.VarChar(50)
+  bankIfscCode      String?          @map("bank_ifsc_code") @db.VarChar(20)
+  bankBranch        String?          @map("bank_branch") @db.VarChar(100)
   isActive         Boolean           @default(true) @map("is_active")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
@@ -54,6 +78,13 @@ model Employee {
   salaryBreakdowns SalaryBreakdown[]
   salarySlips      SalarySlip[]
   user             User?
+  enrollments      Enrollment[]
+  quizAttempts     QuizAttempt[]
+  attendanceCorrections AttendanceCorrection[]
+  pathEnrollments  PathEnrollment[]
+  iltRegistrations ILTRegistration[]
+  badges           EmployeeBadge[]
+  documents        EmployeeDocument[]
 
   @@index([managerId], map: "employees_manager_id_fkey")
   @@map("employees")
@@ -91,6 +122,77 @@ model Attendance {
 
   @@unique([employeeId, date])
   @@map("attendance")
+}
+
+model AttendanceCorrection {
+  id              Int              @id @default(autoincrement())
+  attendanceId    Int              @map("attendance_id")
+  employeeId      Int              @map("employee_id")
+  editedById      Int              @map("edited_by_id")
+  date            DateTime         @db.Date
+  previousStatus  AttendanceStatus? @map("previous_status")
+  newStatus       AttendanceStatus @map("new_status")
+  previousCheckIn String?           @map("previous_check_in") @db.VarChar(10)
+  newCheckIn      String?           @map("new_check_in") @db.VarChar(10)
+  previousCheckOut String?          @map("previous_check_out") @db.VarChar(10)
+  newCheckOut     String?           @map("new_check_out") @db.VarChar(10)
+  reason          String            @db.Text
+  createdAt       DateTime          @default(now()) @map("created_at")
+  employee        Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  editedBy        User              @relation("AttendanceCorrectionEditor", fields: [editedById], references: [id])
+
+  @@index([employeeId, date])
+  @@index([editedById])
+  @@map("attendance_corrections")
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+  recipientId Int      @map("recipient_id")
+  type        String   @db.VarChar(50)
+  title       String   @db.VarChar(255)
+  message     String   @db.Text
+  entityId    Int?     @map("entity_id")
+  employeeId  Int?     @map("employee_id")
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  recipient   User     @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model EmployeeDocument {
+  id             Int      @id @default(autoincrement())
+  employeeId     Int      @map("employee_id")
+  title          String   @db.VarChar(255)
+  fileName       String   @map("file_name") @db.VarChar(255)
+  mimeType       String   @map("mime_type") @db.VarChar(100)
+  sizeBytes      Int      @map("size_bytes")
+  contentBase64  String   @map("content_base64") @db.LongText
+  uploadedById   Int      @map("uploaded_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  uploadedBy     User     @relation(fields: [uploadedById], references: [id])
+  downloads      EmployeeDocumentDownload[]
+
+  @@index([employeeId, createdAt])
+  @@index([uploadedById], map: "employee_documents_uploaded_by_id_fkey")
+  @@map("employee_documents")
+}
+
+model EmployeeDocumentDownload {
+  id           Int      @id @default(autoincrement())
+  documentId   Int      @map("document_id")
+  downloadedById Int    @map("downloaded_by_id")
+  downloadedAt DateTime @default(now()) @map("downloaded_at")
+  document     EmployeeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  downloadedBy User     @relation(fields: [downloadedById], references: [id])
+
+  @@index([documentId], map: "employee_document_downloads_document_id_fkey")
+  @@index([downloadedById], map: "employee_document_downloads_downloaded_by_id_fkey")
+  @@map("employee_document_downloads")
 }
 
 model Leave {
@@ -154,20 +256,119 @@ model SalarySlip {
   @@map("salary_slips")
 }
 
+model PayrollImportLog {
+  id            Int      @id @default(autoincrement())
+  month         String   @db.VarChar(7)
+  fileName      String   @map("file_name") @db.VarChar(255)
+  totalRecords  Int      @map("total_records")
+  importedCount Int      @map("imported_count")
+  skippedLedgers String? @map("skipped_ledgers") @db.Text
+  importedById  Int      @map("imported_by_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  importedBy    User     @relation(fields: [importedById], references: [id])
+
+  @@index([importedById], map: "payroll_import_logs_imported_by_id_fkey")
+  @@map("payroll_import_logs")
+}
+
 model Announcement {
   id            Int                  @id @default(autoincrement())
   title         String               @db.VarChar(255)
   content       String?              @db.Text
   priority      AnnouncementPriority @default(LOW)
   attachmentUrl String?              @map("attachment_url") @db.VarChar(500)
+  isPinned      Boolean              @default(false) @map("is_pinned")
+  targetDepartment String?           @map("target_department") @db.VarChar(100)
   createdById   Int                  @map("created_by_id")
   isActive      Boolean              @default(true) @map("is_active")
   createdAt     DateTime             @default(now()) @map("created_at")
   expiresAt     DateTime?            @map("expires_at")
+  scheduledAt   DateTime?            @map("scheduled_at")
+  publishedAt   DateTime?            @map("published_at")
+  sendEmail     Boolean              @default(false) @map("send_email")
+  emailSentAt   DateTime?            @map("email_sent_at")
+  emailError    String?              @map("email_error") @db.Text
   createdBy     User                 @relation(fields: [createdById], references: [id])
+  media         AnnouncementMedia[]
+  reads         AnnouncementRead[]
 
   @@index([createdById], map: "announcements_created_by_id_fkey")
+  @@index([scheduledAt, publishedAt])
   @@map("announcements")
+}
+
+model PasswordResetOtp {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  otpHash   String   @map("otp_hash") @db.VarChar(255)
+  expiresAt DateTime @map("expires_at")
+  attempts  Int      @default(0)
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "password_reset_otps_user_id_fkey")
+  @@map("password_reset_otps")
+}
+
+model AnnouncementRead {
+  id             Int          @id @default(autoincrement())
+  announcementId Int          @map("announcement_id")
+  userId         Int          @map("user_id")
+  readAt         DateTime     @default(now()) @map("read_at")
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId], map: "announcement_reads_user_id_fkey")
+  @@map("announcement_reads")
+}
+
+model AnnouncementMedia {
+  id             Int              @id @default(autoincrement())
+  announcementId Int              @map("announcement_id")
+  type           AnnouncementMediaType
+  url            String           @db.LongText
+  caption        String?          @db.VarChar(255)
+  isDownloadable Boolean          @default(false) @map("is_downloadable")
+  sortOrder      Int              @default(0) @map("sort_order")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  announcement   Announcement     @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@index([announcementId], map: "announcement_media_announcement_id_fkey")
+  @@map("announcement_media")
+}
+
+enum AnnouncementMediaType {
+  IMAGE
+  VIDEO_FILE
+  VIDEO_EMBED
+  SOCIAL_EMBED
+  LINK
+}
+
+model HeroBanner {
+  id          Int             @id @default(autoincrement())
+  title       String?         @db.VarChar(255)
+  subtitle    String?         @db.Text
+  mediaType   HeroMediaType   @map("media_type")
+  mediaUrl    String          @map("media_url") @db.LongText
+  linkUrl     String?         @map("link_url") @db.VarChar(500)
+  sortOrder   Int             @default(0) @map("sort_order")
+  isActive    Boolean         @default(true) @map("is_active")
+  createdById Int             @map("created_by_id")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  createdBy   User            @relation(fields: [createdById], references: [id])
+
+  @@index([createdById], map: "hero_banners_created_by_id_fkey")
+  @@map("hero_banners")
+}
+
+enum HeroMediaType {
+  IMAGE
+  GIF
+  VIDEO_FILE
+  VIDEO_EMBED
 }
 
 model Kra {
@@ -201,6 +402,440 @@ model Kpi {
   @@map("kpis")
 }
 
+// ─── Learning & Development (L&D) — Phase 1 ──────────────────
+
+model Course {
+  id               Int                @id @default(autoincrement())
+  title            String             @db.VarChar(255)
+  description      String?            @db.Text
+  category         String?            @db.VarChar(100)
+  skillTags        String?            @map("skill_tags") @db.VarChar(500)
+  durationMinutes  Int?               @map("duration_minutes")
+  language         String?            @db.VarChar(50)
+  thumbnailUrl     String?            @map("thumbnail_url") @db.LongText
+  mandatory        Boolean            @default(false)
+  targetDepartment String?            @map("target_department") @db.VarChar(100)
+  /// When true, the scheduler auto-enrolls every active employee matching `targetDepartment`
+  /// (or all employees if null) — including ones added/onboarded after the course was published.
+  autoAssign       Boolean            @default(false) @map("auto_assign")
+  /// Due date for auto-created enrollments = enrollment creation date + this many days. Null = no due date.
+  autoAssignDueDays Int?              @map("auto_assign_due_days")
+  /// If set, certificates issued for this course expire `certificateValidityMonths` after issuance
+  /// and the learner must retake the course to renew it. Null = certificates never expire.
+  certificateValidityMonths Int?      @map("certificate_validity_months")
+  /// Opt-in leaderboard, admin-configurable per course. Unavailable (not just unchecked) when
+  /// mandatory = true — compliance training must never feel competitive (addendum FR-4.10).
+  enableRanking    Boolean            @default(false) @map("enable_ranking")
+  rankingScope     RankingScope       @default(DEPARTMENT) @map("ranking_scope")
+  /// Default true: learner sees their own rank/percentile but not other learners' names/scores.
+  /// Admin can disable per course for an explicit named leaderboard (addendum FR-4.9).
+  rankingAnonymous Boolean            @default(true) @map("ranking_anonymous")
+  /// Below this many attempted learners in the scoped population, rank/percentile is suppressed
+  /// (learner sees their score only) — too small a cohort can de-anonymize by elimination (FR-4.11).
+  rankingMinCohortSize Int            @default(8) @map("ranking_min_cohort_size")
+  /// When true, self-enrolling creates a PENDING_APPROVAL enrollment instead of an active one —
+  /// the employee's manager(s) must approve before they can start the course (BRD FR-3.4).
+  /// Manager-initiated assignment is unaffected; it's still instant.
+  requiresApproval Boolean            @default(false) @map("requires_approval")
+  /// When true, a certificate is also issued for each individual module as it's completed
+  /// (in addition to the existing whole-course certificate on full completion). Admin-set per
+  /// course at authoring time.
+  certificatesPerModule Boolean       @default(false) @map("certificates_per_module")
+  navigationMode   CourseNavigationMode @default(FREE) @map("navigation_mode")
+  state            CourseState        @default(DRAFT)
+  createdById      Int                @map("created_by_id")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  createdBy        User               @relation(fields: [createdById], references: [id])
+  modules          CourseModule[]
+  enrollments      Enrollment[]
+  learningPaths    LearningPathCourse[]
+  iltSessions      ILTSession[]
+
+  @@index([createdById], map: "courses_created_by_id_fkey")
+  @@map("courses")
+}
+
+enum CourseNavigationMode {
+  FREE
+  SEQUENTIAL
+}
+
+enum RankingScope {
+  DEPARTMENT
+  ORG_WIDE
+}
+
+enum CourseState {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+model CourseModule {
+  id              Int               @id @default(autoincrement())
+  courseId        Int               @map("course_id")
+  title           String            @db.VarChar(255)
+  sortOrder       Int               @default(0) @map("sort_order")
+  contentType     ModuleContentType @map("content_type")
+  contentUrl      String?           @map("content_url") @db.LongText
+  durationMinutes Int?              @map("duration_minutes")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  course          Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  quiz            Quiz?
+  moduleProgress  ModuleProgress[]
+  certificates    Certificate[]
+
+  @@index([courseId], map: "course_modules_course_id_fkey")
+  @@map("course_modules")
+}
+
+enum ModuleContentType {
+  VIDEO_FILE
+  VIDEO_EMBED
+  DOCUMENT
+  QUIZ
+}
+
+model Quiz {
+  id              Int            @id @default(autoincrement())
+  moduleId        Int            @unique @map("module_id")
+  passPercentage  Int            @default(70) @map("pass_percentage")
+  maxAttempts     Int            @default(3) @map("max_attempts")
+  timeLimitMinutes Int?          @map("time_limit_minutes")
+  randomizeOrder  Boolean        @default(false) @map("randomize_order")
+  module          CourseModule   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  questions       QuizQuestion[]
+  attempts        QuizAttempt[]
+  gradeBands      GradeBand[]
+
+  @@map("quizzes")
+}
+
+/// Admin/manager-configurable grading tier for a quiz (e.g. "Excellent" at 90%, "Good" at 75%).
+/// A score's grade = the highest-minScore band the score meets or exceeds; below every band's
+/// minScore = no grade label (still pass/fail via Quiz.passPercentage, which is independent).
+model GradeBand {
+  id        Int    @id @default(autoincrement())
+  quizId    Int    @map("quiz_id")
+  label     String @db.VarChar(50)
+  minScore  Int    @map("min_score")
+  quiz      Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([quizId], map: "grade_bands_quiz_id_fkey")
+  @@map("grade_bands")
+}
+
+model QuizQuestion {
+  id           Int          @id @default(autoincrement())
+  quizId       Int          @map("quiz_id")
+  questionText String       @map("question_text") @db.Text
+  sortOrder    Int          @default(0) @map("sort_order")
+  quiz         Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  options      QuizOption[]
+
+  @@index([quizId], map: "quiz_questions_quiz_id_fkey")
+  @@map("quiz_questions")
+}
+
+model QuizOption {
+  id           Int          @id @default(autoincrement())
+  questionId   Int          @map("question_id")
+  optionText   String       @map("option_text") @db.VarChar(500)
+  isCorrect    Boolean      @default(false) @map("is_correct")
+  question     QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId], map: "quiz_options_question_id_fkey")
+  @@map("quiz_options")
+}
+
+model QuizAttempt {
+  id            Int       @id @default(autoincrement())
+  quizId        Int       @map("quiz_id")
+  employeeId    Int       @map("employee_id")
+  attemptNumber Int       @map("attempt_number")
+  score         Int
+  passed        Boolean
+  /// Snapshot of the matching GradeBand.label at grading time — kept even if grade bands are
+  /// edited/deleted later, so historical attempts don't silently change grade after the fact.
+  gradeLabel    String?   @map("grade_label") @db.VarChar(50)
+  answersJson   String?   @map("answers_json") @db.LongText
+  startedAt     DateTime  @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  quiz          Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([quizId], map: "quiz_attempts_quiz_id_fkey")
+  @@index([employeeId], map: "quiz_attempts_employee_id_fkey")
+  @@map("quiz_attempts")
+}
+
+model Enrollment {
+  id              Int              @id @default(autoincrement())
+  courseId        Int              @map("course_id")
+  employeeId      Int              @map("employee_id")
+  status          EnrollmentStatus @default(NOT_STARTED)
+  assignedById    Int?             @map("assigned_by_id")
+  dueDate         DateTime?        @map("due_date")
+  startedAt       DateTime?        @map("started_at")
+  completedAt     DateTime?        @map("completed_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  /// Most recent reminder milestone already sent (-7, -3, -1, 0 for due-today, or a positive count of
+  /// escalation notices sent past the due date). Prevents re-sending the same milestone on every poll.
+  lastReminderDay Int?             @map("last_reminder_day")
+  course          Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  employee        Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  assignedBy      User?            @relation("EnrollmentAssignedBy", fields: [assignedById], references: [id])
+  moduleProgress  ModuleProgress[]
+  certificates    Certificate[]
+
+  @@unique([courseId, employeeId])
+  @@index([employeeId], map: "enrollments_employee_id_fkey")
+  @@index([assignedById], map: "enrollments_assigned_by_id_fkey")
+  @@map("enrollments")
+}
+
+enum EnrollmentStatus {
+  /// Manager nominated the employee; awaiting the employee's accept/decline.
+  NOMINATED
+  /// Employee self-enrolled into an approval-required course; awaiting manager decision.
+  PENDING_APPROVAL
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  /// Nomination declined or self-enroll request rejected — terminal, distinct from FAILED
+  /// (which means "attempted and didn't pass"), so reporting can tell the two apart.
+  REJECTED
+}
+
+model ModuleProgress {
+  id                 Int              @id @default(autoincrement())
+  enrollmentId       Int              @map("enrollment_id")
+  moduleId           Int              @map("module_id")
+  status             ModuleProgressStatus @default(NOT_STARTED)
+  lastPositionSeconds Int?            @map("last_position_seconds")
+  lastPageViewed     Int?             @map("last_page_viewed")
+  timeSpentSeconds   Int              @default(0) @map("time_spent_seconds")
+  completedAt        DateTime?        @map("completed_at")
+  enrollment         Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  module             CourseModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, moduleId])
+  @@index([moduleId], map: "module_progress_module_id_fkey")
+  @@map("module_progress")
+}
+
+enum ModuleProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Certificate {
+  id                Int           @id @default(autoincrement())
+  enrollmentId      Int           @map("enrollment_id")
+  /// Null = whole-course certificate (original behavior). Set = a per-module certificate,
+  /// only created when the course has certificatesPerModule enabled. Application code enforces
+  /// "at most one whole-course certificate per enrollment" since a (enrollmentId, NULL) unique
+  /// pair doesn't dedupe in SQL — NULLs don't participate in unique constraints.
+  moduleId          Int?          @map("module_id")
+  certificateNumber String        @unique @map("certificate_number") @db.VarChar(100)
+  issuedAt          DateTime      @default(now()) @map("issued_at")
+  /// Computed at issuance from the course's `certificateValidityMonths`. Null = never expires.
+  expiresAt         DateTime?     @map("expires_at")
+  /// Most recent expiry-reminder milestone sent (30, 7, 0 = expired), mirrors Enrollment.lastReminderDay.
+  lastExpiryReminderDay Int?      @map("last_expiry_reminder_day")
+  pdfBase64         String        @map("pdf_base64") @db.LongText
+  enrollment        Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  module            CourseModule? @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, moduleId])
+  @@index([moduleId], map: "certificates_module_id_fkey")
+  @@map("certificates")
+}
+
+// ─── Learning Paths (bundles of Courses) ───────────────────────
+
+model LearningPath {
+  id               Int                  @id @default(autoincrement())
+  title            String               @db.VarChar(255)
+  description      String?              @db.Text
+  thumbnailUrl     String?              @map("thumbnail_url") @db.LongText
+  mandatory        Boolean              @default(false)
+  targetDepartment String?              @map("target_department") @db.VarChar(100)
+  /// FREE = courses can be taken in any order; SEQUENTIAL = each course unlocks only after
+  /// the previous one in the path is completed (mirrors Course.navigationMode).
+  navigationMode   CourseNavigationMode @default(FREE) @map("navigation_mode")
+  /// Mirrors Course.requiresApproval — self-enrolling creates a PENDING_APPROVAL path enrollment.
+  requiresApproval Boolean              @default(false) @map("requires_approval")
+  state            CourseState          @default(DRAFT)
+  createdById      Int                  @map("created_by_id")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+  createdBy        User                 @relation(fields: [createdById], references: [id])
+  courses          LearningPathCourse[]
+  pathEnrollments  PathEnrollment[]
+
+  @@index([createdById], map: "learning_paths_created_by_id_fkey")
+  @@map("learning_paths")
+}
+
+model LearningPathCourse {
+  id        Int          @id @default(autoincrement())
+  pathId    Int          @map("path_id")
+  courseId  Int          @map("course_id")
+  sortOrder Int          @default(0) @map("sort_order")
+  path      LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  course    Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([pathId, courseId])
+  @@index([courseId], map: "learning_path_courses_course_id_fkey")
+  @@map("learning_path_courses")
+}
+
+model PathEnrollment {
+  id           Int              @id @default(autoincrement())
+  pathId       Int              @map("path_id")
+  employeeId   Int              @map("employee_id")
+  status       EnrollmentStatus @default(NOT_STARTED)
+  assignedById Int?             @map("assigned_by_id")
+  dueDate      DateTime?        @map("due_date")
+  startedAt    DateTime?        @map("started_at")
+  completedAt  DateTime?        @map("completed_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  path         LearningPath     @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  employee     Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  assignedBy   User?            @relation("PathEnrollmentAssignedBy", fields: [assignedById], references: [id])
+
+  @@unique([pathId, employeeId])
+  @@index([employeeId], map: "path_enrollments_employee_id_fkey")
+  @@index([assignedById], map: "path_enrollments_assigned_by_id_fkey")
+  @@map("path_enrollments")
+}
+
+// ─── Instructor-Led Training (ILT) ─────────────────────────────
+
+model ILTSession {
+  id               Int                  @id @default(autoincrement())
+  title            String               @db.VarChar(255)
+  description      String?              @db.Text
+  /// Optional link to an existing Course this session supports/replaces (e.g. an in-person
+  /// run of a course that also has a self-paced online version). Null = standalone session.
+  courseId         Int?                 @map("course_id")
+  instructorName   String               @db.VarChar(100)
+  /// Physical address, or "Online: <meeting link>" — same free-text convention as the rest
+  /// of the app uses for flexible fields rather than a separate location-type enum.
+  location         String               @db.VarChar(255)
+  startsAt         DateTime             @map("starts_at")
+  endsAt           DateTime             @map("ends_at")
+  capacity         Int
+  targetDepartment String?              @map("target_department") @db.VarChar(100)
+  state            ILTSessionState      @default(DRAFT)
+  createdById      Int                  @map("created_by_id")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+  course           Course?              @relation(fields: [courseId], references: [id])
+  createdBy        User                 @relation(fields: [createdById], references: [id])
+  registrations    ILTRegistration[]
+
+  @@index([courseId], map: "ilt_sessions_course_id_fkey")
+  @@index([createdById], map: "ilt_sessions_created_by_id_fkey")
+  @@map("ilt_sessions")
+}
+
+enum ILTSessionState {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+model ILTRegistration {
+  id           Int                  @id @default(autoincrement())
+  sessionId    Int                  @map("session_id")
+  employeeId   Int                  @map("employee_id")
+  status       ILTRegistrationStatus @default(REGISTERED)
+  registeredAt DateTime             @default(now()) @map("registered_at")
+  session      ILTSession           @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  employee     Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, employeeId])
+  @@index([employeeId], map: "ilt_registrations_employee_id_fkey")
+  @@map("ilt_registrations")
+}
+
+enum ILTRegistrationStatus {
+  REGISTERED
+  /// Session was full at registration time; promoted to REGISTERED automatically if a spot frees up.
+  WAITLISTED
+  CANCELLED
+  ATTENDED
+  NO_SHOW
+}
+
+// ─── Badges (gamification, Phase 2 ranking-adjacent feature) ───
+
+model Badge {
+  id            Int               @id @default(autoincrement())
+  name          String            @db.VarChar(100)
+  description   String?           @db.Text
+  /// Maps to a lucide-react icon name client-side (e.g. "Trophy", "Award") — avoids storing
+  /// images, same "reference a known icon set" pattern used nowhere else yet but consistent
+  /// with how this codebase prefers free-text convention fields over new asset storage.
+  iconKey       String            @default("Award") @db.VarChar(50)
+  criteriaType  BadgeCriteriaType @map("criteria_type")
+  /// Meaning depends on criteriaType: grade label string for QUIZ_GRADE (stored in criteriaLabel
+  /// instead, see below), a count for COURSE_COMPLETION_COUNT/PATH_COMPLETION_COUNT, unused for
+  /// PERFECT_SCORE (always 100%).
+  criteriaValue Int?              @map("criteria_value")
+  /// Used only by QUIZ_GRADE — the exact GradeBand.label that triggers this badge (e.g. "Excellent").
+  criteriaLabel String?           @map("criteria_label") @db.VarChar(50)
+  createdById   Int               @map("created_by_id")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  createdBy     User              @relation(fields: [createdById], references: [id])
+  earnedBy      EmployeeBadge[]
+
+  @@index([createdById], map: "badges_created_by_id_fkey")
+  @@map("badges")
+}
+
+enum BadgeCriteriaType {
+  /// Earned when a quiz attempt's gradeLabel matches Badge.criteriaLabel.
+  QUIZ_GRADE
+  /// Earned when a quiz attempt scores exactly 100%.
+  PERFECT_SCORE
+  /// Earned when an employee's total COMPLETED course enrollments reaches criteriaValue.
+  COURSE_COMPLETION_COUNT
+  /// Earned when an employee's total COMPLETED path enrollments reaches criteriaValue.
+  PATH_COMPLETION_COUNT
+  /// Earned when an employee's total COMPLETED ModuleProgress rows (across all courses) reaches
+  /// criteriaValue — mirrors how PW/Udemy-style platforms award milestones on raw lesson count,
+  /// not just full-course completions.
+  MODULE_COMPLETION_COUNT
+}
+
+model EmployeeBadge {
+  id                Int      @id @default(autoincrement())
+  employeeId        Int      @map("employee_id")
+  badgeId           Int      @map("badge_id")
+  earnedAt          DateTime @default(now()) @map("earned_at")
+  /// Which quiz attempt triggered this (QUIZ_GRADE/PERFECT_SCORE badges only). Nullable for
+  /// milestone badges (course/path completion counts) which aren't tied to one specific attempt.
+  sourceQuizAttemptId Int?   @map("source_quiz_attempt_id")
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  badge             Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  /// Prevents the same badge from being re-awarded for the same milestone-count threshold being
+  /// crossed twice (e.g. completing course #5 again can't happen — Enrollment is unique per
+  /// course — but this guards QUIZ_GRADE/PERFECT_SCORE from double-awarding per attempt).
+  @@unique([employeeId, badgeId, sourceQuizAttemptId])
+  @@index([employeeId], map: "employee_badges_employee_id_fkey")
+  @@index([badgeId], map: "employee_badges_badge_id_fkey")
+  @@map("employee_badges")
+}
+
 enum Role {
   EMPLOYEE
   MANAGER
@@ -214,6 +849,10 @@ enum AttendanceStatus {
   HALF_DAY
   ON_LEAVE
   HOLIDAY
+  WFH
+  ON_DUTY
+  CLIENT_VISIT
+  BUSINESS_TRAVEL
 }
 
 enum LeaveStatus {

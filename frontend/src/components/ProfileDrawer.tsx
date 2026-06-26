@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ProfileView } from '../pages/Profile';
 
-type Tab = 'about' | 'performance' | 'leaves' | 'attendance';
+type Tab = 'about' | 'performance' | 'leaves' | 'attendance' | 'documents';
 
 export const ProfileDrawer: React.FC<{
   employeeId: number;
@@ -24,6 +24,7 @@ export const ProfileDrawer: React.FC<{
     if (tab === 'leaves') return 'Leaves';
     if (tab === 'performance') return 'Performance';
     if (tab === 'attendance') return 'Attendance';
+    if (tab === 'documents') return 'Documents';
     return 'Profile';
   }, [tab]);
 

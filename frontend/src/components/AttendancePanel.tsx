@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Upload, RefreshCw, Check, AlertCircle, FileText, Plus, X, Calendar } from 'lucide-react';
-import { attendanceApi, type Employee, type Attendance, type AuthUser } from '../services/api';
+import { Clock, Upload, RefreshCw, Check, AlertCircle, FileText, Plus, X, Calendar, Pencil } from 'lucide-react';
+import { attendanceApi, type Employee, type Attendance, type AuthUser, type EmployeeAttendanceStatus } from '../services/api';
 
 interface AttendancePanelProps {
   user: AuthUser | null;
   employees: Employee[];
+  focusEmployeeId?: number | null;
 }
 
-export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employees }) => {
+export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employees, focusEmployeeId }) => {
   const isHR = user?.role === 'HR';
   const isLeadership = user?.role === 'LEADERSHIP';
   const isManager = user?.role === 'MANAGER';
@@ -34,6 +35,15 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
   // Manual Adjust form state
   const [showManualForm, setShowManualForm] = useState(false);
   const [savingManual, setSavingManual] = useState(false);
+  const [showSelfCorrection, setShowSelfCorrection] = useState(false);
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  const [correctionForm, setCorrectionForm] = useState({
+    date: '',
+    status: 'WFH' as EmployeeAttendanceStatus,
+    checkIn: '',
+    checkOut: '',
+    reason: '',
+  });
   const [manualForm, setManualForm] = useState({
     date: '',
     checkIn: '',
@@ -71,6 +81,13 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
       setSelectedEmployeeId(employees[0]!.id);
     }
   }, [canBrowseEmployeeAttendance, employees, isManager, selectedEmployeeId, user]);
+
+  // Jump to the employee referenced by an incoming notification
+  useEffect(() => {
+    if (focusEmployeeId && canBrowseEmployeeAttendance) {
+      setSelectedEmployeeId(focusEmployeeId);
+    }
+  }, [focusEmployeeId, canBrowseEmployeeAttendance]);
 
   useEffect(() => {
     if (selectedEmployeeId) {
@@ -155,6 +172,32 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
       setError(err.message || 'Failed to save manual attendance');
     } finally {
       setSavingManual(false);
+    }
+  };
+
+  const handleSelfCorrection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.employeeId || !correctionForm.date || !correctionForm.reason.trim()) return;
+    setSavingCorrection(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const response = await attendanceApi.correctOwn({
+        employeeId: user.employeeId,
+        date: correctionForm.date,
+        status: correctionForm.status,
+        checkIn: correctionForm.checkIn || undefined,
+        checkOut: correctionForm.checkOut || undefined,
+        reason: correctionForm.reason.trim(),
+      });
+      setSuccessMsg(response.message || 'Attendance updated and notifications sent');
+      setShowSelfCorrection(false);
+      setCorrectionForm({ date: '', status: 'WFH', checkIn: '', checkOut: '', reason: '' });
+      await loadAttendance();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update attendance');
+    } finally {
+      setSavingCorrection(false);
     }
   };
 
@@ -323,6 +366,14 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
                 : 'My Attendance Logs'}
             </h3>
             <div className="flex items-center gap-3">
+              {selectedEmployeeId === user?.employeeId && !showSelfCorrection && (
+                <button
+                  onClick={() => setShowSelfCorrection(true)}
+                  className="btn-orange px-3 py-1.5 text-xs font-bold rounded-xl"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Correct My Attendance
+                </button>
+              )}
               {isHR && !showManualForm && (
                 <button
                   onClick={() => setShowManualForm(true)}
@@ -336,6 +387,75 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
               </span>
             </div>
           </div>
+
+          {showSelfCorrection && selectedEmployeeId === user?.employeeId && (
+            <form onSubmit={handleSelfCorrection} className="bg-orange-50/20 rounded-3xl p-5 border border-orange-100/50 mb-6 space-y-4 animate-scale-in">
+              <div className="flex items-center justify-between border-b border-orange-100 pb-3">
+                <div>
+                  <h4 className="text-slate-800 font-black text-sm">Correct My Attendance</h4>
+                  <p className="text-xs text-slate-400 mt-1">Changes apply immediately and notify your managers and HR.</p>
+                </div>
+                <button type="button" onClick={() => setShowSelfCorrection(false)} className="p-1 text-slate-400 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Date *</label>
+                  <input
+                    type="date"
+                    required
+                    max={new Date().toISOString().split('T')[0]}
+                    value={correctionForm.date}
+                    onChange={e => setCorrectionForm(previous => ({ ...previous, date: e.target.value }))}
+                    className="w-full bg-white text-slate-800 text-sm rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Status *</label>
+                  <select
+                    value={correctionForm.status}
+                    onChange={e => setCorrectionForm(previous => ({ ...previous, status: e.target.value as EmployeeAttendanceStatus }))}
+                    className="w-full bg-white text-slate-800 text-sm rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                  >
+                    <option value="WFH">Work From Home</option>
+                    <option value="ON_DUTY">On Duty / Field Work</option>
+                    <option value="CLIENT_VISIT">Client Visit</option>
+                    <option value="BUSINESS_TRAVEL">Business Travel</option>
+                    <option value="PRESENT">Present</option>
+                    <option value="HALF_DAY">Half Day</option>
+                    <option value="ABSENT">Absent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Check In (optional)</label>
+                  <input type="time" step="1" value={correctionForm.checkIn} onChange={e => setCorrectionForm(previous => ({ ...previous, checkIn: e.target.value }))} className="w-full bg-white text-slate-800 text-sm rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Check Out (optional)</label>
+                  <input type="time" step="1" value={correctionForm.checkOut} onChange={e => setCorrectionForm(previous => ({ ...previous, checkOut: e.target.value }))} className="w-full bg-white text-slate-800 text-sm rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Reason *</label>
+                <textarea
+                  required
+                  minLength={3}
+                  rows={2}
+                  value={correctionForm.reason}
+                  onChange={e => setCorrectionForm(previous => ({ ...previous, reason: e.target.value }))}
+                  placeholder="Explain the WFH, outside duty, missed attendance, or correction"
+                  className="w-full bg-white text-slate-800 text-sm rounded-xl px-3 py-2 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 resize-none"
+                />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setShowSelfCorrection(false)} disabled={savingCorrection} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-xl">Cancel</button>
+                <button type="submit" disabled={savingCorrection} className="btn-orange px-5 py-2 text-xs font-bold rounded-xl">
+                  {savingCorrection ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving...</> : 'Save Correction'}
+                </button>
+              </div>
+            </form>
+          )}
 
           {/* Manual Entry Form */}
           {showManualForm && (
@@ -508,7 +628,7 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
                       <td className="py-3.5 px-2">
                         <span
                           className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-                            record.status === 'PRESENT'
+                            ['PRESENT', 'WFH', 'ON_DUTY', 'CLIENT_VISIT', 'BUSINESS_TRAVEL'].includes(record.status)
                               ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                               : record.status === 'ABSENT'
                               ? 'bg-red-50 text-red-600 border-red-100'
@@ -523,7 +643,7 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
                             ? `HOLIDAY (${record.holidayName})`
                             : record.status === 'ON_LEAVE' && record.leaveType
                             ? `LEAVE (${record.leaveType})`
-                            : record.status}
+                            : record.status.replace(/_/g, ' ')}
                         </span>
                       </td>
                     </tr>
