@@ -4,6 +4,7 @@ import {
   BookOpen,
   CheckCircle,
   Download,
+  Eye,
   FileText,
   Loader2,
   Search,
@@ -11,6 +12,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { libraryApi, type LibraryDocument, type UserRole } from '../../services/api';
+import { LibraryDocumentViewer } from '../LibraryDocumentViewer';
 
 const MANAGEMENT_ROLES: UserRole[] = ['HR', 'LEADERSHIP', 'MANAGER'];
 
@@ -45,6 +47,7 @@ export const ELibraryTab: React.FC<ELibraryTabProps> = ({ role }) => {
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [viewingDocument, setViewingDocument] = useState<LibraryDocument | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = () => {
@@ -84,15 +87,18 @@ export const ELibraryTab: React.FC<ELibraryTabProps> = ({ role }) => {
   };
 
   const handleMarkRead = async (id: number) => {
-    setBusyId(id);
+    setDocuments(prev => prev.map(d => (d.id === id && !d.isRead ? { ...d, isRead: true, readCount: d.readCount + 1 } : d)));
     try {
       await libraryApi.markRead(id);
-      setDocuments(prev => prev.map(d => (d.id === id ? { ...d, isRead: true, readCount: d.readCount + 1 } : d)));
     } catch (err: any) {
       setError(err.message || 'Failed to mark as read');
-    } finally {
-      setBusyId(null);
     }
+  };
+
+  const handleMarkReadManually = async (id: number) => {
+    setBusyId(id);
+    await handleMarkRead(id);
+    setBusyId(null);
   };
 
   const handleDownload = async (id: number) => {
@@ -207,65 +213,83 @@ export const ELibraryTab: React.FC<ELibraryTabProps> = ({ role }) => {
               <p className="font-semibold">{documents.length === 0 ? 'No documents yet' : 'No documents match your search'}</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map(document => (
-                <div key={document.id} className="bg-white rounded-3xl p-4 border border-orange-100/50 shadow-sm">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-2xl bg-orange-50 text-[#f46617] flex items-center justify-center flex-shrink-0">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-black text-slate-800 truncate">{document.title}</p>
-                          {document.isRead && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 flex-shrink-0">
-                              <CheckCircle className="w-2.5 h-2.5" /> Read
-                            </span>
-                          )}
-                        </div>
-                        {document.description && (
-                          <p className="text-xs text-slate-500 font-semibold mt-1 line-clamp-2">{document.description}</p>
-                        )}
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">
-                          {document.fileName} · {formatBytes(document.sizeBytes)} · Added {new Date(document.createdAt).toLocaleDateString('en-IN')}
-                          {document.uploadedBy && ` · by ${document.uploadedBy.username}`}
-                        </p>
-                      </div>
+                <div
+                  key={document.id}
+                  className="bg-white rounded-[24px] border border-orange-100/50 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setViewingDocument(document)}
+                    className="h-28 bg-gradient-to-br from-orange-100 to-amber-50 flex items-center justify-center overflow-hidden group relative"
+                  >
+                    <FileText className="w-10 h-10 text-orange-300" />
+                    <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-colors flex items-center justify-center">
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs font-bold flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5" /> Open
+                      </span>
                     </div>
+                  </button>
 
-                    <div className="flex items-center gap-2 justify-end flex-shrink-0">
-                      {!document.isRead && (
-                        <button
-                          type="button"
-                          onClick={() => handleMarkRead(document.id)}
-                          disabled={busyId === document.id}
-                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-orange-50 hover:bg-orange-100 text-[#f46617] text-xs font-bold rounded-2xl border border-orange-100 transition-colors disabled:opacity-60"
-                        >
-                          {busyId === document.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                          Mark as Read
-                        </button>
+                  <div className="p-4 flex-1 flex flex-col">
+                    <div className="flex items-center gap-2 mb-2">
+                      {document.isRead && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
+                          <CheckCircle className="w-2.5 h-2.5" /> Read
+                        </span>
                       )}
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-800 leading-snug mb-1 truncate">{document.title}</h3>
+                    {document.description && (
+                      <p className="text-xs text-slate-500 leading-relaxed line-clamp-2 mb-3">{document.description}</p>
+                    )}
+                    <p className="text-[11px] text-slate-400 font-semibold mb-3">
+                      {document.fileName} · {formatBytes(document.sizeBytes)}
+                      {document.uploadedBy && ` · ${document.uploadedBy.username}`}
+                    </p>
+
+                    <div className="mt-auto space-y-2">
                       <button
                         type="button"
-                        onClick={() => handleDownload(document.id)}
-                        disabled={busyId === document.id}
-                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-2xl border border-slate-200 transition-colors disabled:opacity-60"
-                        title="Download"
+                        onClick={() => setViewingDocument(document)}
+                        className="btn-orange px-3 py-2 text-xs font-bold rounded-xl w-full justify-center flex items-center gap-1.5"
                       >
-                        {busyId === document.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                        Download
+                        <Eye className="w-3.5 h-3.5" /> Open
                       </button>
-                      {canManage && (
+                      <div className="flex gap-2">
+                        {!document.isRead && (
+                          <button
+                            type="button"
+                            onClick={() => handleMarkReadManually(document.id)}
+                            disabled={busyId === document.id}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#f46617] border border-orange-100 transition-colors disabled:opacity-60"
+                          >
+                            {busyId === document.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                            Mark Read
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => handleDelete(document)}
-                          className="inline-flex items-center justify-center p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl border border-red-100 transition-colors"
-                          title="Remove document"
+                          onClick={() => handleDownload(document.id)}
+                          disabled={busyId === document.id}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 transition-colors disabled:opacity-60"
+                          title="Download"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {busyId === document.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          Download
                         </button>
-                      )}
+                        {canManage && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(document)}
+                            className="inline-flex items-center justify-center p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl border border-red-100 transition-colors flex-shrink-0"
+                            title="Remove document"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -274,6 +298,14 @@ export const ELibraryTab: React.FC<ELibraryTabProps> = ({ role }) => {
           )}
         </div>
       </div>
+
+      {viewingDocument && (
+        <LibraryDocumentViewer
+          document={viewingDocument}
+          onClose={() => setViewingDocument(null)}
+          onOpened={() => handleMarkRead(viewingDocument.id)}
+        />
+      )}
     </div>
   );
 };
