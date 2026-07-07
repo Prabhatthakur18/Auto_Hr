@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
+import { randomUUID } from 'node:crypto';
 import prisma from '../config/db.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { NotFoundError, BadRequestError } from '../utils/errors.js';
 import { classifyLink } from '../utils/linkEmbed.js';
+import { putUploadFile, extensionForMimeType } from '../utils/uploadStorage.js';
 
 const router = Router();
 const upload = multer({
@@ -58,7 +60,8 @@ router.post(
 
         if (req.file) {
             const mimeType = req.file.mimetype;
-            mediaUrl = `data:${mimeType};base64,${req.file.buffer.toString('base64')}`;
+            const extension = extensionForMimeType(mimeType);
+            mediaUrl = await putUploadFile(`hero-banners/${randomUUID()}.${extension}`, req.file.buffer);
             mediaType = mimeType.startsWith('video/') ? 'VIDEO_FILE' : mimeType === 'image/gif' ? 'GIF' : 'IMAGE';
         } else if (videoLink) {
             const kind = classifyLink(videoLink);

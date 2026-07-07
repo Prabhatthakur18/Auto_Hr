@@ -5,6 +5,15 @@ import { z } from 'zod';
  * Fails fast on startup if required variables are missing.
  */
 
+// z.coerce.boolean() treats any non-empty string (including "false") as true.
+// Env vars are always strings, so booleans must be parsed from "true"/"false" text instead.
+const booleanString = (defaultValue: boolean) =>
+    z
+        .enum(['true', 'false'])
+        .optional()
+        .default(String(defaultValue) as 'true' | 'false')
+        .transform((val) => val === 'true');
+
 const envSchema = z.object({
     // Database
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
@@ -30,6 +39,17 @@ const envSchema = z.object({
     // Salary / payroll integration
     SALARY_API_KEY: z.string().default(''),
     SALARY_ENCRYPTION_KEY: z.string().default(''),
+
+    // Upload storage (avatars, other public assets)
+    UPLOAD_STORAGE_DRIVER: z.enum(['local', 'hostinger-ftp']).default('local'),
+    UPLOAD_PUBLIC_BASE_URL: z.string().optional().default(''),
+    FTP_HOST: z.string().optional().default(''),
+    FTP_PORT: z.coerce.number().optional().default(21),
+    FTP_USER: z.string().optional().default(''),
+    FTP_PASSWORD: z.string().optional().default(''),
+    FTP_SECURE: booleanString(false),
+    FTP_REMOTE_ROOT: z.string().optional().default('/public_html/uploads'),
+    FTP_PRIVATE_REMOTE_ROOT: z.string().optional().default('/private-uploads'),
 });
 
 // Load and validate environment variables

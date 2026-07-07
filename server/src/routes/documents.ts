@@ -1,11 +1,13 @@
 import { Router, type Request } from 'express';
 import multer from 'multer';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import prisma from '../config/db.js';
 import { authenticate, assertCanAccessEmployee, getScopedEmployeeIds, scopeData } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../utils/errors.js';
 import { getEmployeeUserId, notify } from '../utils/notificationService.js';
+import { putPrivateUploadFile, getPrivateUploadFile, removePrivateUploadFile, extensionForMimeType } from '../utils/uploadStorage.js';
 
 const router = Router();
 const upload = multer({
@@ -39,21 +41,28 @@ function parseTitle(value: unknown): string {
     return parsed.data;
 }
 
-function toDownloadPayload(document: {
+async function toDownloadPayload(document: {
     id: number;
     title: string;
     fileName: string;
     mimeType: string;
     sizeBytes: number;
-    contentBase64: string;
+    contentBase64: string | null;
+    storageKey: string | null;
 }) {
+    // storageKey is only null for documents uploaded before the Hostinger migration;
+    // those still have their content inline until the one-time migration script runs.
+    const base64 = document.storageKey
+        ? (await getPrivateUploadFile(document.storageKey)).toString('base64')
+        : document.contentBase64;
+
     return {
         id: document.id,
         title: document.title,
         fileName: document.fileName,
         mimeType: document.mimeType,
         sizeBytes: document.sizeBytes,
-        dataUrl: `data:${document.mimeType};base64,${document.contentBase64}`,
+        dataUrl: `data:${document.mimeType};base64,${base64}`,
     };
 }
 
@@ -201,6 +210,10 @@ router.post(
         const title = parseTitle(req.body.title);
         const file = validateDocumentFile(req.file);
 
+        const extension = extensionForMimeType(file.mimetype);
+        const storageKey = `employee-documents/${req.user!.employeeId}/${randomUUID()}.${extension}`;
+        await putPrivateUploadFile(storageKey, file.buffer);
+
         const document = await prisma.employeeDocument.create({
             data: {
                 employeeId: req.user!.employeeId,
@@ -208,7 +221,7 @@ router.post(
                 fileName: file.originalname,
                 mimeType: file.mimetype,
                 sizeBytes: file.size,
-                contentBase64: file.buffer.toString('base64'),
+                storageKey,
                 uploadedById: req.user!.userId,
             },
             select: {
@@ -243,16 +256,26 @@ router.put(
             fileName?: string;
             mimeType?: string;
             sizeBytes?: number;
-            contentBase64?: string;
+            storageKey?: string;
+            contentBase64?: null;
         } = {};
 
         if (req.body.title !== undefined) data.title = parseTitle(req.body.title);
         if (req.file) {
             const file = validateDocumentFile(req.file);
+            const extension = extensionForMimeType(file.mimetype);
+            const storageKey = `employee-documents/${existing.employeeId}/${randomUUID()}.${extension}`;
+            await putPrivateUploadFile(storageKey, file.buffer);
+
             data.fileName = file.originalname;
             data.mimeType = file.mimetype;
             data.sizeBytes = file.size;
-            data.contentBase64 = file.buffer.toString('base64');
+            data.storageKey = storageKey;
+            data.contentBase64 = null;
+
+            if (existing.storageKey) {
+                await removePrivateUploadFile(existing.storageKey).catch(() => {});
+            }
         }
 
         if (Object.keys(data).length === 0) throw new BadRequestError('Nothing to update');
@@ -287,6 +310,9 @@ router.delete(
         }
 
         await prisma.employeeDocument.delete({ where: { id } });
+        if (existing.storageKey) {
+            await removePrivateUploadFile(existing.storageKey).catch(() => {});
+        }
         res.json({ success: true, message: 'Document removed' });
     })
 );
@@ -298,7 +324,7 @@ router.get(
         const document = await getAccessibleDocument(req, id);
         await recordDownloadAndNotify(req, document);
 
-        res.json({ success: true, data: { document: toDownloadPayload(document) } });
+        res.json({ success: true, data: { document: await toDownloadPayload(document) } });
     })
 );
 
@@ -321,7 +347,7 @@ router.get(
             await recordDownloadAndNotify(req, document);
         }
 
-        res.json({ success: true, data: { documents: documents.map(toDownloadPayload) } });
+        res.json({ success: true, data: { documents: await Promise.all(documents.map(toDownloadPayload)) } });
     })
 );
 

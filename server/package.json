@@ -4,6 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "postinstall": "prisma generate",
         "dev": "tsx watch src/index.ts",
         "build": "tsc && node -e \"require('node:fs').cpSync('src/assets','dist/assets',{recursive:true})\"",
         "start": "node dist/index.js",
@@ -12,10 +13,12 @@
         "db:migrate": "prisma migrate dev",
         "db:seed": "tsx prisma/seed.ts",
         "db:studio": "prisma studio",
+        "migrate:storage": "tsx scripts/migrateBase64ToStorage.ts",
         "lint": "eslint src/"
     },
     "dependencies": {
         "@prisma/client": "^6.5.0",
+        "basic-ftp": "^6.0.1",
         "bcrypt": "^5.1.1",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.5",

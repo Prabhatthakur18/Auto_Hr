@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
+import { randomUUID } from 'node:crypto';
 import prisma from '../config/db.js';
 import { authenticate, authorize, scopeData, getScopedEmployeeIds, assertCanAccessEmployee } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { NotFoundError, BadRequestError, ForbiddenError, TooManyRequestsError } from '../utils/errors.js';
 import { classifyLink } from '../utils/linkEmbed.js';
+import { putUploadFile, extensionForMimeType } from '../utils/uploadStorage.js';
 import { notify, getEmployeeUserIdMap, hasReceivedLearningNotificationToday, getManagerAndHrUserIds, getAudienceUserIds, notifyEmployeesBulk } from '../utils/notificationService.js';
 import { sendLearningReminderEmail } from '../utils/mailer.js';
 import { resolveGradeLabel, evaluateAttemptBadges, evaluateCourseCompletionBadges, evaluatePathCompletionBadges, evaluateModuleCompletionBadges } from '../utils/badgeService.js';
@@ -162,7 +164,8 @@ router.post(
 
         let thumbnailUrl: string | null = null;
         if (req.file) {
-            thumbnailUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+            const extension = extensionForMimeType(req.file.mimetype);
+            thumbnailUrl = await putUploadFile(`course-thumbnails/${randomUUID()}.${extension}`, req.file.buffer);
         }
 
         const course = await prisma.course.create({
@@ -249,7 +252,8 @@ router.post(
         if (isNaN(id)) throw new BadRequestError('Invalid course ID');
         if (!req.file) throw new BadRequestError('A thumbnail image is required');
 
-        const thumbnailUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        const extension = extensionForMimeType(req.file.mimetype);
+        const thumbnailUrl = await putUploadFile(`course-thumbnails/${randomUUID()}.${extension}`, req.file.buffer);
 
         const course = await prisma.course.update({ where: { id }, data: { thumbnailUrl } });
 
@@ -342,7 +346,8 @@ router.post(
             contentUrl = body.videoLink;
         } else if (body.contentType === 'VIDEO_FILE' || body.contentType === 'DOCUMENT') {
             if (!req.file) throw new BadRequestError(`A file upload is required for a ${body.contentType.toLowerCase().replace('_', ' ')} module`);
-            contentUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+            const extension = extensionForMimeType(req.file.mimetype);
+            contentUrl = await putUploadFile(`course-modules/${randomUUID()}.${extension}`, req.file.buffer);
         }
         // QUIZ modules have no contentUrl — quiz questions are attached separately
 
@@ -1680,7 +1685,8 @@ router.post(
 
         let thumbnailUrl: string | null = null;
         if (req.file) {
-            thumbnailUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+            const extension = extensionForMimeType(req.file.mimetype);
+            thumbnailUrl = await putUploadFile(`learning-path-thumbnails/${randomUUID()}.${extension}`, req.file.buffer);
         }
 
         const path = await prisma.learningPath.create({

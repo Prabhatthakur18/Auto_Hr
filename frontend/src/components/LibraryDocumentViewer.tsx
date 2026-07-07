@@ -16,14 +16,6 @@ function formatBytes(bytes: number) {
   return `${(kb / 1024).toFixed(1)} MB`;
 }
 
-function dataUrlToBlob(dataUrl: string, mimeType: string): Blob {
-  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type: mimeType });
-}
-
 function saveDownloadedFile(fileName: string, blobUrl: string) {
   const link = window.document.createElement('a');
   link.href = blobUrl;
@@ -59,12 +51,15 @@ export const LibraryDocumentViewer: React.FC<LibraryDocumentViewerProps> = ({ do
     let cancelled = false;
     let createdUrl: string | null = null;
     libraryApi.download(document.id)
-      .then(res => {
+      .then(async (res) => {
         if (cancelled || !res.data) return;
-        // Large PDFs as a raw base64 data: URL silently fail to render in an iframe src
-        // (multi-megabyte attribute values are unreliable across browsers) — a blob: URL
-        // has no such practical size ceiling.
-        const blob = dataUrlToBlob(res.data.contentUrl, res.data.mimeType);
+        // Large PDFs as a raw URL passed straight to an iframe src can be blocked by the
+        // browser's PDF viewer sandboxing on some setups — a blob: URL avoids that and
+        // also lets us revoke it (free memory) once the viewer closes.
+        const fileResponse = await fetch(res.data.contentUrl);
+        if (!fileResponse.ok) throw new Error('Failed to fetch document content');
+        const blob = await fileResponse.blob();
+        if (cancelled) return;
         createdUrl = URL.createObjectURL(blob);
         setBlobUrl(createdUrl);
         if (!hasFiredOpened.current) {

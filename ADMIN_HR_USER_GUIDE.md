@@ -47,9 +47,9 @@ Before the system is shared with all users, HR/Admin should complete this checkl
 ### User Login Setup
 
 - Make sure every active employee has a user account.
-- Default username is the employee name.
-- Default password is `123456`.
-- Employees should be asked to change their password after first login.
+- There is no automatic username or password. HR must type both a username and a password when creating each employee's account.
+- Recommended convention: use the employee's name (or a short form of it) as the username, and set a simple temporary password of your choice (e.g. the same one for every new joiner, such as `Welcome@123`).
+- Share the temporary password with the employee directly (in person or via a secure message), and ask them to change it after first login.
 - HR/Admin accounts should use stronger passwords and should not share credentials.
 
 ### Payroll Setup
@@ -194,6 +194,8 @@ Each employee has a profile containing:
 
 Employees can view their own profile. HR/Admin can update employee information.
 
+Employees can upload or change their own profile photo from their profile page. HR/Admin can also set or change an employee's photo while editing their profile.
+
 Recommended practice: HR should review employee profiles after import or bulk setup to make sure employee details are complete.
 
 ---
@@ -201,6 +203,11 @@ Recommended practice: HR should review employee profiles after import or bulk se
 ## 8. Attendance Management
 
 Attendance is used to track monthly employee attendance.
+
+Attendance data can get into the system in two different ways:
+
+- **Uploading a file** (a biometric device export or an Excel/attendance-portal export) — this always works, regardless of where the system is hosted.
+- **Live auto-sync directly from the biometric device** — this only works if the server can reach the biometric machine over the office's local network. It will **not** work if the system is hosted on a cloud platform such as Vercel, since cloud servers cannot reach a device sitting on the office LAN. If this system is cloud-hosted, plan to use file upload as the regular attendance import method.
 
 ### HR/Admin Actions
 
@@ -257,6 +264,8 @@ The Leaves section is used to manage leave applications and approvals.
 ## 10. Salary and Payroll
 
 The Salary section is used for payroll import, salary history, and employee payslips.
+
+⚠️ **Current limitation:** The payroll import feature is fully built, but the file Tally exports today cannot yet be mapped correctly to the right salary columns (basic, HRA, PF, etc.) — Tally's JSON export doesn't include column labels, so the system cannot safely tell which figure is which. **Do not rely on this feature for real payroll until the development team confirms it has been resolved.** Ask the dev team for the current status before using it for an actual month's payroll.
 
 ### For HR/Admin
 
@@ -356,6 +365,8 @@ The E-Library is different from Document Manager. Document Manager stores each e
 
 Important note: Everyone in the company is notified the moment a new document is added to the E-Library, except the person who uploaded it.
 
+Important note: PDF documents open and can be read directly in the browser. Word documents (`.doc`/`.docx`) cannot be previewed in-browser — employees must download them to view the content.
+
 ### Recommended Practice
 
 - Use clear, specific titles so employees know what they are opening, such as `Leave Policy 2026` rather than `Policy Doc`.
@@ -441,6 +452,7 @@ HR can:
 - Enable certificates.
 - Assign courses to employees.
 - Nominate employees for courses.
+- Require approval before enrollment — when this setting is turned on for a course, an employee who tries to enroll must wait for a manager or HR to approve the request before they can start it. Both the requester and the approver are notified at each step.
 - Use the **Manage** option on any course card to reopen it later — this is how HR edits course details, adds or removes modules, edits an existing quiz, or publishes/unpublishes/archives a course after it has already been created.
 
 ### Editing a Course or Quiz After Publishing
@@ -513,6 +525,8 @@ Employees can:
 - Join waitlist when full.
 - Cancel registration if allowed.
 
+If a registered employee cancels, the next person on the waitlist is automatically given their seat and notified.
+
 ### Badges
 
 Badges are achievements earned by employees.
@@ -578,10 +592,14 @@ Users may receive notifications for:
 - Salary slip availability
 - New announcements
 - Course assignments
+- Learning path assignments
+- A manager or HR sending a friendly nudge about an overdue or upcoming course
+- Being nominated for a course
+- Course approval requested (sent to the approver when a course requires approval before enrollment) and the decision (sent to the employee once approved or declined)
 - Learning reminders
 - Course overdue alerts
 - Certificate expiry
-- Live training changes
+- Live training changes, including being promoted from the waitlist into a confirmed seat
 - Badge earned
 - Document downloads
 - A new course being published (sent to employees in the course's target audience)
@@ -662,12 +680,11 @@ Before sharing the system with all employees:
 
 ## 19. Suggested Employee Login Communication
 
-HR can share the following simple message:
+HR can share a message such as:
 
 > Dear Team,  
 > Autoform Connect is now available for employee self-service.  
-> Please log in using your employee name as username.  
-> Your temporary password is `123456`.  
+> Please log in using the username and temporary password HR has shared with you.  
 > After login, please review your profile, attendance, leaves, documents, salary slips, announcements, and learning sections.  
 > For any correction, please contact HR.
 

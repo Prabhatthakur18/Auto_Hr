@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
+import { randomUUID } from 'node:crypto';
 import prisma from '../config/db.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { NotFoundError, BadRequestError } from '../utils/errors.js';
 import { notify, getAudienceUserIds } from '../utils/notificationService.js';
+import { putUploadFile, extensionForMimeType } from '../utils/uploadStorage.js';
 
 const router = Router();
 const upload = multer({
@@ -79,7 +81,8 @@ router.post(
         }
 
         const body = req.body as z.infer<typeof uploadDocumentSchema>;
-        const contentUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        const extension = extensionForMimeType(req.file.mimetype);
+        const contentUrl = await putUploadFile(`library/${randomUUID()}.${extension}`, req.file.buffer);
 
         const document = await prisma.libraryDocument.create({
             data: {

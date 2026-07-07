@@ -171,7 +171,8 @@ model EmployeeDocument {
   fileName       String   @map("file_name") @db.VarChar(255)
   mimeType       String   @map("mime_type") @db.VarChar(100)
   sizeBytes      Int      @map("size_bytes")
-  contentBase64  String   @map("content_base64") @db.LongText
+  contentBase64  String?  @map("content_base64") @db.LongText
+  storageKey     String?  @map("storage_key") @db.VarChar(500)
   uploadedById   Int      @map("uploaded_by_id")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")

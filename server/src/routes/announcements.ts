@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
+import { randomUUID } from 'node:crypto';
 import prisma from '../config/db.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { NotFoundError, BadRequestError } from '../utils/errors.js';
 import { classifyLink } from '../utils/linkEmbed.js';
+import { putUploadFile, extensionForMimeType } from '../utils/uploadStorage.js';
 import { deliverAnnouncementEmail, notifyAnnouncementPublished } from '../utils/announcementScheduler.js';
 
 const router = Router();
@@ -164,6 +166,19 @@ router.post(
 
         const files = (req.files as Express.Multer.File[] | undefined) || [];
 
+        const uploadedMedia = await Promise.all(
+            files.map(async (file, index) => {
+                const extension = extensionForMimeType(file.mimetype);
+                const url = await putUploadFile(`announcements/${randomUUID()}.${extension}`, file.buffer);
+                return {
+                    type: file.mimetype.startsWith('video/') ? 'VIDEO_FILE' as const : 'IMAGE' as const,
+                    url,
+                    isDownloadable: downloadableFlags[index] === true,
+                    sortOrder: index,
+                };
+            })
+        );
+
         const announcement = await prisma.announcement.create({
             data: {
                 title,
@@ -178,12 +193,7 @@ router.post(
                 expiresAt: expiresAt ? new Date(expiresAt) : null,
                 media: {
                     create: [
-                        ...files.map((file, index) => ({
-                            type: file.mimetype.startsWith('video/') ? 'VIDEO_FILE' as const : 'IMAGE' as const,
-                            url: `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
-                            isDownloadable: downloadableFlags[index] === true,
-                            sortOrder: index,
-                        })),
+                        ...uploadedMedia,
                         ...links.map((link, index) => ({
                             type: classifyLink(link),
                             url: link,
