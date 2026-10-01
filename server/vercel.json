@@ -1,6 +1,7 @@
 {
     "buildCommand": "echo no-op",
     "outputDirectory": "public",
+    "regions": ["bom1"],
     "rewrites": [
         {
             "source": "/api/(.*)",

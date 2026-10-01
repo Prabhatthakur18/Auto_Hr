@@ -9,14 +9,16 @@ router.use(authenticate);
 
 router.get('/', asyncHandler(async (req, res) => {
     const recipientId = req.user!.userId;
-    const notifications = await prisma.notification.findMany({
-        where: { recipientId },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-    });
-    const unreadCount = await prisma.notification.count({
-        where: { recipientId, readAt: null },
-    });
+    const [notifications, unreadCount] = await Promise.all([
+        prisma.notification.findMany({
+            where: { recipientId },
+            orderBy: { createdAt: 'desc' },
+            take: 100,
+        }),
+        prisma.notification.count({
+            where: { recipientId, readAt: null },
+        }),
+    ]);
     res.json({ success: true, data: { notifications, unreadCount } });
 }));
 

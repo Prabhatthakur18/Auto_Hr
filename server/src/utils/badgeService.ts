@@ -1,5 +1,5 @@
 import prisma from '../config/db.js';
-import { notify, getEmployeeUserIdMap } from './notificationService.js';
+import { getEmployeeUserIdMap } from './notificationService.js';
 
 /** Highest-minScore GradeBand whose minScore the score meets/exceeds, or null if none qualify. */
 export function resolveGradeLabel(score: number, gradeBands: { label: string; minScore: number }[]): string | null {
@@ -22,35 +22,37 @@ async function awardAttemptBadge(employeeId: number, badgeId: number, sourceQuiz
     }
 }
 
-/** Awards a milestone badge (COURSE_COMPLETION_COUNT/PATH_COMPLETION_COUNT) with no source
- * attempt. NULL doesn't participate in SQL uniqueness, so dedup is an explicit existence check
- * instead of relying on the unique constraint. */
-async function awardMilestoneBadge(employeeId: number, badgeId: number): Promise<boolean> {
-    const existing = await prisma.employeeBadge.findFirst({
-        where: { employeeId, badgeId, sourceQuizAttemptId: null },
-    });
-    if (existing) return false;
-
-    await prisma.employeeBadge.create({
-        data: { employeeId, badgeId, sourceQuizAttemptId: null },
-    });
-    return true;
-}
-
 async function notifyBadgeEarned(employeeId: number, badgeNames: string[]): Promise<void> {
     if (badgeNames.length === 0) return;
     const userIdMap = await getEmployeeUserIdMap([employeeId]);
     const recipientUserId = userIdMap.get(employeeId);
     if (!recipientUserId) return;
 
-    for (const name of badgeNames) {
-        await notify({
-            recipientIds: [recipientUserId],
+    // One insert for all badges earned at once.
+    await prisma.notification.createMany({
+        data: badgeNames.map((name) => ({
+            recipientId: recipientUserId,
             type: 'BADGE_EARNED',
             title: 'New badge earned!',
             message: `You've earned the "${name}" badge.`,
-        });
-    }
+        })),
+    });
+}
+
+/** Awards every not-yet-held milestone badge in `badges` with two queries total (lookup + insert). */
+async function awardMilestoneBadges(employeeId: number, badges: { id: number; name: string }[]): Promise<string[]> {
+    if (badges.length === 0) return [];
+    const held = await prisma.employeeBadge.findMany({
+        where: { employeeId, badgeId: { in: badges.map((b) => b.id) }, sourceQuizAttemptId: null },
+        select: { badgeId: true },
+    });
+    const heldIds = new Set(held.map((h) => h.badgeId));
+    const toAward = badges.filter((b) => !heldIds.has(b.id));
+    if (toAward.length === 0) return [];
+    await prisma.employeeBadge.createMany({
+        data: toAward.map((b) => ({ employeeId, badgeId: b.id, sourceQuizAttemptId: null })),
+    });
+    return toAward.map((b) => b.name);
 }
 
 /** Checks QUIZ_GRADE and PERFECT_SCORE badges against one freshly-graded attempt. */
@@ -89,11 +91,7 @@ export async function evaluateCourseCompletionBadges(employeeId: number): Promis
         where: { criteriaType: 'COURSE_COMPLETION_COUNT', criteriaValue: { lte: completedCount } },
     });
 
-    const earnedNames: string[] = [];
-    for (const badge of candidateBadges) {
-        const awarded = await awardMilestoneBadge(employeeId, badge.id);
-        if (awarded) earnedNames.push(badge.name);
-    }
+    const earnedNames = await awardMilestoneBadges(employeeId, candidateBadges);
 
     await notifyBadgeEarned(employeeId, earnedNames);
 }
@@ -106,11 +104,7 @@ export async function evaluatePathCompletionBadges(employeeId: number): Promise<
         where: { criteriaType: 'PATH_COMPLETION_COUNT', criteriaValue: { lte: completedCount } },
     });
 
-    const earnedNames: string[] = [];
-    for (const badge of candidateBadges) {
-        const awarded = await awardMilestoneBadge(employeeId, badge.id);
-        if (awarded) earnedNames.push(badge.name);
-    }
+    const earnedNames = await awardMilestoneBadges(employeeId, candidateBadges);
 
     await notifyBadgeEarned(employeeId, earnedNames);
 }
@@ -127,11 +121,7 @@ export async function evaluateModuleCompletionBadges(employeeId: number): Promis
         where: { criteriaType: 'MODULE_COMPLETION_COUNT', criteriaValue: { lte: completedCount } },
     });
 
-    const earnedNames: string[] = [];
-    for (const badge of candidateBadges) {
-        const awarded = await awardMilestoneBadge(employeeId, badge.id);
-        if (awarded) earnedNames.push(badge.name);
-    }
+    const earnedNames = await awardMilestoneBadges(employeeId, candidateBadges);
 
     await notifyBadgeEarned(employeeId, earnedNames);
 }

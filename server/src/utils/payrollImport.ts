@@ -1,5 +1,3 @@
-import xml2js from 'xml2js';
-import xlsx from 'xlsx';
 
 export interface PayLineItem {
     label: string;
@@ -148,7 +146,9 @@ function detectMonthFromPeriodText(text: string): string | null {
  * (company name/address, pay period), then a "Particulars" row that is the
  * real column header, then one data row per employee plus aggregate rows.
  */
-export function parsePayrollXlsx(buffer: Buffer): ParsedPayrollResult {
+export async function parsePayrollXlsx(buffer: Buffer): Promise<ParsedPayrollResult> {
+    // Loaded on demand — keeps the parser out of every cold start.
+    const { default: xlsx } = await import('xlsx');
     const workbook = xlsx.read(buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     if (!sheetName) return { paysheets: [], detectedMonth: null };
@@ -253,6 +253,7 @@ export function parsePayrollJson(raw: string): ParsedEmployeePaysheet[] {
  * Parses a Tally XML payroll export (VOUCHER/ALLLEDGERENTRIES.LIST shape).
  */
 export async function parsePayrollXml(raw: string): Promise<ParsedEmployeePaysheet[]> {
+    const { default: xml2js } = await import('xml2js');
     const result = await xml2js.parseStringPromise(raw, { explicitArray: true, tagNameProcessors: [stripNamespace] });
 
     const paysheets: ParsedEmployeePaysheet[] = [];

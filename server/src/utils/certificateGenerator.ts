@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib';
+import type { PDFFont, PDFPage, RGB } from 'pdf-lib';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,9 @@ function buildCertificateNumber(courseId: number, employeeId: number, moduleId?:
 const PAGE_WIDTH = 842;
 const PAGE_HEIGHT = 595;
 const CENTER_X = PAGE_WIDTH / 2;
+
+// Plain RGB values (what pdf-lib's rgb() returns) so pdf-lib itself can be loaded on demand.
+const rgb = (red: number, green: number, blue: number) => ({ type: 'RGB', red, green, blue }) as RGB;
 
 const ORANGE = rgb(0.96, 0.4, 0.09);
 const ORANGE_LIGHT = rgb(0.98, 0.85, 0.7);
@@ -46,6 +49,7 @@ async function generateCertificatePdf(options: {
 }): Promise<Uint8Array> {
     const { learnerName, courseTitle, moduleTitle, certificateNumber, completedAt, gradeLabel } = options;
 
+    const { PDFDocument, StandardFonts } = await import('pdf-lib');
     const doc = await PDFDocument.create();
     const page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
 
@@ -128,6 +132,7 @@ export async function issueCertificate(enrollmentId: number): Promise<void> {
     // than relying on the (enrollmentId, moduleId) compound unique index.
     const existing = await prisma.certificate.findFirst({
         where: { enrollmentId, moduleId: null },
+        select: { id: true },
     });
     if (existing) return; // already issued, avoid duplicate (BRD §7.8)
 
@@ -176,6 +181,7 @@ export async function issueCertificate(enrollmentId: number): Promise<void> {
 export async function issueModuleCertificate(enrollmentId: number, moduleId: number): Promise<void> {
     const existing = await prisma.certificate.findUnique({
         where: { enrollmentId_moduleId: { enrollmentId, moduleId } },
+        select: { id: true },
     });
     if (existing) return;
 

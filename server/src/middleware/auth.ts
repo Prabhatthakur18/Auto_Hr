@@ -86,29 +86,37 @@ export function canReviewLeaves(role: Role): boolean {
 export async function getDescendantEmployeeIds(
     managerEmployeeId: number
 ): Promise<number[]> {
+    // One query for the whole (small) active org chart, then walk it in memory,
+    // instead of one DB round trip per hierarchy level.
+    const employees = await prisma.employee.findMany({
+        where: { isActive: true, managerId: { not: null } },
+        select: { id: true, managerId: true },
+    });
+
+    const reportsByManager = new Map<number, number[]>();
+    for (const employee of employees) {
+        const list = reportsByManager.get(employee.managerId!) ?? [];
+        list.push(employee.id);
+        reportsByManager.set(employee.managerId!, list);
+    }
+
     const visited = new Set<number>();
     const descendants: number[] = [];
     let frontier = [managerEmployeeId];
 
     while (frontier.length > 0) {
-        const reports = await prisma.employee.findMany({
-            where: {
-                managerId: { in: frontier },
-                isActive: true,
-            },
-            select: { id: true },
-        });
-
         const nextFrontier: number[] = [];
 
-        for (const report of reports) {
-            if (visited.has(report.id)) {
-                continue;
-            }
+        for (const managerId of frontier) {
+            for (const reportId of reportsByManager.get(managerId) ?? []) {
+                if (visited.has(reportId)) {
+                    continue;
+                }
 
-            visited.add(report.id);
-            descendants.push(report.id);
-            nextFrontier.push(report.id);
+                visited.add(reportId);
+                descendants.push(reportId);
+                nextFrontier.push(reportId);
+            }
         }
 
         frontier = nextFrontier;
@@ -136,10 +144,11 @@ export async function getScopedEmployeeIds(
                 return [];
             }
 
-            return [
-                scope.employeeId,
-                ...(await getDescendantEmployeeIds(scope.employeeId)),
-            ];
+            // Memoized per request — several handlers ask for the scope more than once.
+            req.scopedEmployeeIds ??= getDescendantEmployeeIds(scope.employeeId).then(
+                (descendants) => [scope.employeeId!, ...descendants]
+            );
+            return req.scopedEmployeeIds;
         default:
             return [];
     }
@@ -163,6 +172,7 @@ declare global {
     namespace Express {
         interface Request {
             dataScope?: DataScope;
+            scopedEmployeeIds?: Promise<number[]>;
         }
     }
 }

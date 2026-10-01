@@ -22,11 +22,19 @@ export async function processCertificateExpiry(): Promise<void> {
     try {
         const now = new Date();
 
+        // Only certificates inside the reminder window (expiring within the largest milestone, or
+        // expired since the last poll), and never the stored PDF bytes.
+        const windowEnd = new Date(now.getTime() + (Math.max(...MILESTONES) + 1) * 24 * 60 * 60 * 1000);
+        const windowStart = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
         const certificates = await prisma.certificate.findMany({
-            where: { expiresAt: { not: null } },
-            include: {
+            where: { expiresAt: { not: null, gte: windowStart, lte: windowEnd } },
+            select: {
+                id: true,
+                expiresAt: true,
+                lastExpiryReminderDay: true,
                 enrollment: {
-                    include: {
+                    select: {
+                        id: true,
                         course: { select: { id: true, title: true } },
                         employee: { select: { id: true, name: true, email: true } },
                     },
@@ -47,7 +55,10 @@ export async function processCertificateExpiry(): Promise<void> {
 }
 
 async function processOne(
-    certificate: Awaited<ReturnType<typeof prisma.certificate.findMany>>[number] & {
+    certificate: {
+        id: number;
+        expiresAt: Date | null;
+        lastExpiryReminderDay: number | null;
         enrollment: {
             id: number;
             course: { id: number; title: string };

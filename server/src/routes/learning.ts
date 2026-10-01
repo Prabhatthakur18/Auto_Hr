@@ -12,6 +12,7 @@ import { putUploadFile, extensionForMimeType } from '../utils/uploadStorage.js';
 import { notify, getEmployeeUserIdMap, hasReceivedLearningNotificationToday, getManagerAndHrUserIds, getAudienceUserIds, notifyEmployeesBulk } from '../utils/notificationService.js';
 import { sendLearningReminderEmail } from '../utils/mailer.js';
 import { resolveGradeLabel, evaluateAttemptBadges, evaluateCourseCompletionBadges, evaluatePathCompletionBadges, evaluateModuleCompletionBadges } from '../utils/badgeService.js';
+import { Prisma } from '@prisma/client';
 
 const router = Router();
 const upload = multer({
@@ -113,6 +114,38 @@ router.get(
     })
 );
 
+/**
+ * Loads a course's modules → quiz → questions → options tree with the four levels fetched in
+ * parallel and stitched together in memory. Prisma's nested `include` would issue one query per
+ * level strictly in sequence (and MariaDB can't use relation joins), so this turns ~5 round trips
+ * into 1 for the course player. Output matches
+ * `modules: { orderBy: sortOrder, include: { quiz: { include: { questions: { include: { options }, orderBy: sortOrder } } } } }`.
+ */
+async function loadCourseModuleTree(courseWhere: Prisma.CourseWhereInput) {
+    const [modules, quizzes, questions, options] = await Promise.all([
+        prisma.courseModule.findMany({ where: { course: courseWhere }, orderBy: { sortOrder: 'asc' } }),
+        prisma.quiz.findMany({ where: { module: { course: courseWhere } } }),
+        prisma.quizQuestion.findMany({ where: { quiz: { module: { course: courseWhere } } }, orderBy: { sortOrder: 'asc' } }),
+        prisma.quizOption.findMany({ where: { question: { quiz: { module: { course: courseWhere } } } }, orderBy: { id: 'asc' } }),
+    ]);
+
+    const optionsByQuestion = new Map<number, typeof options>();
+    for (const option of options) {
+        const list = optionsByQuestion.get(option.questionId) ?? [];
+        list.push(option);
+        optionsByQuestion.set(option.questionId, list);
+    }
+    const questionsByQuiz = new Map<number, (typeof questions[number] & { options: typeof options })[]>();
+    for (const question of questions) {
+        const list = questionsByQuiz.get(question.quizId) ?? [];
+        list.push({ ...question, options: optionsByQuestion.get(question.id) ?? [] });
+        questionsByQuiz.set(question.quizId, list);
+    }
+    const quizByModule = new Map(quizzes.map((quiz) => [quiz.moduleId, { ...quiz, questions: questionsByQuiz.get(quiz.id) ?? [] }]));
+
+    return modules.map((module) => ({ ...module, quiz: quizByModule.get(module.id) ?? null }));
+}
+
 // ─── GET /api/learning/courses/:id ────────────────────────────
 
 router.get(
@@ -121,17 +154,16 @@ router.get(
         const id = parseInt(req.params['id'] as string, 10);
         if (isNaN(id)) throw new BadRequestError('Invalid course ID');
 
-        const course = await prisma.course.findUnique({
-            where: { id },
-            include: {
-                createdBy: { select: { username: true } },
-                modules: {
-                    orderBy: { sortOrder: 'asc' },
-                    include: { quiz: { include: { questions: { include: { options: true }, orderBy: { sortOrder: 'asc' } } } } } },
-            },
-        });
+        const [courseRow, modules] = await Promise.all([
+            prisma.course.findUnique({
+                where: { id },
+                include: { createdBy: { select: { username: true } } },
+            }),
+            loadCourseModuleTree({ id }),
+        ]);
 
-        if (!course) throw new NotFoundError('Course not found');
+        if (!courseRow) throw new NotFoundError('Course not found');
+        const course = { ...courseRow, modules };
 
         // Hide correct-answer flags from non-HR viewers (they're about to take the quiz, not edit it)
         if (req.user!.role !== 'HR') {
@@ -1189,23 +1221,25 @@ router.get(
         const id = parseInt(req.params['id'] as string, 10);
         if (isNaN(id)) throw new BadRequestError('Invalid enrollment ID');
 
-        const enrollment = await prisma.enrollment.findUnique({
-            where: { id },
-            include: {
-                course: {
-                    include: {
-                        modules: {
-                            orderBy: { sortOrder: 'asc' },
-                            include: { quiz: { include: { questions: { include: { options: true }, orderBy: { sortOrder: 'asc' } } } } },
-                        },
-                    },
+        // Enrollment, its course and the course's module tree are fetched together (the tree is
+        // located through the enrollment id, so nothing waits on the enrollment row first).
+        const courseOfEnrollment = { enrollments: { some: { id } } };
+        const [enrollmentRow, courseRow, modules] = await Promise.all([
+            prisma.enrollment.findUnique({
+                where: { id },
+                include: {
+                    moduleProgress: true,
+                    certificates: { select: { certificateNumber: true, expiresAt: true, moduleId: true } },
                 },
-                moduleProgress: true,
-                certificates: { select: { certificateNumber: true, expiresAt: true, moduleId: true } },
-            },
-        });
+            }),
+            prisma.course.findFirst({ where: courseOfEnrollment }),
+            loadCourseModuleTree(courseOfEnrollment),
+        ]);
 
-        if (!enrollment) throw new NotFoundError('Enrollment not found');
+        if (!enrollmentRow || !courseRow) throw new NotFoundError('Enrollment not found');
+        const { moduleProgress, certificates, ...enrollmentFields } = enrollmentRow;
+        // Same key order as the previous nested include: scalars, course, moduleProgress, certificates.
+        const enrollment = { ...enrollmentFields, course: { ...courseRow, modules }, moduleProgress, certificates };
         if (enrollment.employeeId !== req.user!.employeeId) {
             throw new BadRequestError('You can only view your own enrollment');
         }
@@ -1248,12 +1282,21 @@ async function evaluateCourseCompletion(enrollmentId: number): Promise<void> {
 
     const progressByModule = new Map(enrollment.moduleProgress.map((p) => [p.moduleId, p]));
 
+    // One query for every passed quiz in the course, instead of one per quiz module.
+    const quizIds = enrollment.course.modules.flatMap((m) => (m.contentType === 'QUIZ' && m.quiz ? [m.quiz.id] : []));
+    const passedQuizIds = new Set(
+        quizIds.length
+            ? (await prisma.quizAttempt.findMany({
+                where: { quizId: { in: quizIds }, employeeId: enrollment.employeeId, passed: true },
+                select: { quizId: true },
+                distinct: ['quizId'],
+            })).map((a) => a.quizId)
+            : []
+    );
+
     for (const module of enrollment.course.modules) {
         if (module.contentType === 'QUIZ' && module.quiz) {
-            const passed = await prisma.quizAttempt.findFirst({
-                where: { quizId: module.quiz.id, employeeId: enrollment.employeeId, passed: true },
-            });
-            if (!passed) return; // not yet complete
+            if (!passedQuizIds.has(module.quiz.id)) return; // not yet complete
         } else {
             const progress = progressByModule.get(module.id);
             if (!progress || progress.status !== 'COMPLETED') return; // not yet complete
@@ -1268,8 +1311,10 @@ async function evaluateCourseCompletion(enrollmentId: number): Promise<void> {
     const { issueCertificate } = await import('../utils/certificateGenerator.js');
     await issueCertificate(enrollmentId);
 
-    const employee = await prisma.employee.findUnique({ where: { id: enrollment.employeeId }, select: { name: true } });
-    const managerAndHrUserIds = await getManagerAndHrUserIds(enrollment.employeeId);
+    const [employee, managerAndHrUserIds] = await Promise.all([
+        prisma.employee.findUnique({ where: { id: enrollment.employeeId }, select: { name: true } }),
+        getManagerAndHrUserIds(enrollment.employeeId),
+    ]);
     await notify({
         recipientIds: managerAndHrUserIds,
         type: 'COURSE_COMPLETED',
@@ -1431,7 +1476,14 @@ router.post(
 
         const body = req.body as z.infer<typeof progressUpdateSchema>;
 
-        const enrollment = await prisma.enrollment.findUnique({ where: { id: enrollmentId } });
+        // Fired every few seconds while a learner watches/reads, so the three lookups run together.
+        const [enrollment, module, existing] = await Promise.all([
+            prisma.enrollment.findUnique({ where: { id: enrollmentId } }),
+            prisma.courseModule.findUnique({ where: { id: body.moduleId } }),
+            prisma.moduleProgress.findUnique({
+                where: { enrollmentId_moduleId: { enrollmentId, moduleId: body.moduleId } },
+            }),
+        ]);
         if (!enrollment) throw new NotFoundError('Enrollment not found');
         if (enrollment.employeeId !== req.user!.employeeId) {
             throw new BadRequestError('You can only update your own progress');
@@ -1440,14 +1492,9 @@ router.post(
             throw new BadRequestError('This enrollment is not yet active');
         }
 
-        const module = await prisma.courseModule.findUnique({ where: { id: body.moduleId } });
         if (!module || module.courseId !== enrollment.courseId) {
             throw new BadRequestError('Module does not belong to this course');
         }
-
-        const existing = await prisma.moduleProgress.findUnique({
-            where: { enrollmentId_moduleId: { enrollmentId, moduleId: body.moduleId } },
-        });
 
         const newStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' = body.markComplete
             ? 'COMPLETED'
@@ -1529,9 +1576,14 @@ router.get(
     asyncHandler(async (req, res) => {
         const certificateNumber = req.params['certificateNumber'] as string;
 
+        // Metadata only — never pull the stored PDF just to verify a certificate number.
         const certificate = await prisma.certificate.findUnique({
             where: { certificateNumber },
-            include: { enrollment: { include: { course: { select: { title: true } }, employee: { select: { name: true } } } } },
+            select: {
+                issuedAt: true,
+                expiresAt: true,
+                enrollment: { select: { course: { select: { title: true } }, employee: { select: { name: true } } } },
+            },
         });
 
         if (!certificate) {
@@ -1568,7 +1620,7 @@ router.post(
 
         const enrollment = await prisma.enrollment.findUnique({
             where: { id },
-            include: { certificates: true },
+            include: { certificates: { select: { id: true } } },
         });
         if (!enrollment) throw new NotFoundError('Enrollment not found');
         if (enrollment.employeeId !== req.user!.employeeId) {

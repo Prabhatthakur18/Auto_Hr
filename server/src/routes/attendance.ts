@@ -1,9 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
-import * as XLSX from 'xlsx';
-// @ts-ignore
-import ZKLib from 'zkteco-js';
 import prisma from '../config/db.js';
 import {
     authenticate,
@@ -15,6 +12,7 @@ import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { BadRequestError } from '../utils/errors.js';
 import { notify, getManagerAndHrUserIds } from '../utils/notificationService.js';
+import { mapWithConcurrency } from '../utils/concurrency.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -242,28 +240,28 @@ router.get(
             end = new Date(`${year}-${String(mon).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`);
         }
 
-        const attendance = await prisma.attendance.findMany({
-            where: {
-                employeeId,
-                date: { gte: start, lte: end },
-            },
-            orderBy: { date: 'asc' },
-        });
-
-        const holidays = await prisma.holiday.findMany({
-            where: {
-                date: { gte: start, lte: end },
-            },
-        });
-
-        const leaves = await prisma.leave.findMany({
-            where: {
-                employeeId,
-                status: 'APPROVED',
-                startDate: { lte: end },
-                endDate: { gte: start },
-            },
-        });
+        const [attendance, holidays, leaves] = await Promise.all([
+            prisma.attendance.findMany({
+                where: {
+                    employeeId,
+                    date: { gte: start, lte: end },
+                },
+                orderBy: { date: 'asc' },
+            }),
+            prisma.holiday.findMany({
+                where: {
+                    date: { gte: start, lte: end },
+                },
+            }),
+            prisma.leave.findMany({
+                where: {
+                    employeeId,
+                    status: 'APPROVED',
+                    startDate: { lte: end },
+                    endDate: { gte: start },
+                },
+            }),
+        ]);
 
         const dbAttendanceMap = new Map(
             attendance.map((a) => [a.date.toISOString().split('T')[0]!, a])
@@ -569,6 +567,8 @@ router.post(
 
         const { targetMonth } = req.body;
 
+        // Loaded on demand — keeps the parser out of every cold start.
+        const XLSX = await import('xlsx');
         const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]!];
         if (!sheet) throw new BadRequestError('Empty spreadsheet');
@@ -816,6 +816,9 @@ router.post(
 
         let zkInstance: any = null;
         try {
+            // Loaded on demand — only this route needs the device driver.
+            // @ts-ignore — zkteco-js ships no type declarations
+            const { default: ZKLib } = await import('zkteco-js');
             zkInstance = new ZKLib(ip, port, 10000, 4000);
             
             // 1. Connect to device
@@ -852,14 +855,25 @@ router.post(
             });
             const bioToEmpId = new Map(employees.map(e => [e.biometricId, e.id]));
 
-            let inserted = 0;
-            let skipped = 0;
-            let unmapped = 0;
-
-            for (const record of processed) {
+            const mapped = processed.flatMap((record) => {
                 const empId = bioToEmpId.get(record.biometricId);
-                if (!empId) { unmapped++; continue; }
+                return empId ? [{ empId, record }] : [];
+            });
+            const unmapped = processed.length - mapped.length;
 
+            // Upserts run a few at a time instead of strictly one after another.
+            const outcomes = await mapWithConcurrency(mapped, 5, async ({ empId, record }) => {
+                const fields = {
+                    day: record.day,
+                    checkIn: record.checkIn,
+                    checkOut: record.checkOut,
+                    totalWorkingHours: record.totalWorkingHours,
+                    isLate: record.isLate,
+                    lateBy: record.lateBy,
+                    overtime: record.overtime,
+                    otTime: record.otTime,
+                    status: 'PRESENT' as const,
+                };
                 try {
                     await prisma.attendance.upsert({
                         where: {
@@ -868,36 +882,16 @@ router.post(
                                 date: new Date(record.date),
                             },
                         },
-                        update: {
-                            checkIn: record.checkIn,
-                            checkOut: record.checkOut,
-                            day: record.day,
-                            totalWorkingHours: record.totalWorkingHours,
-                            isLate: record.isLate,
-                            lateBy: record.lateBy,
-                            overtime: record.overtime,
-                            otTime: record.otTime,
-                            status: 'PRESENT',
-                        },
-                        create: {
-                            employeeId: empId,
-                            date: new Date(record.date),
-                            day: record.day,
-                            checkIn: record.checkIn,
-                            checkOut: record.checkOut,
-                            totalWorkingHours: record.totalWorkingHours,
-                            isLate: record.isLate,
-                            lateBy: record.lateBy,
-                            overtime: record.overtime,
-                            otTime: record.otTime,
-                            status: 'PRESENT',
-                        },
+                        update: fields,
+                        create: { employeeId: empId, date: new Date(record.date), ...fields },
                     });
-                    inserted++;
+                    return true;
                 } catch {
-                    skipped++;
+                    return false;
                 }
-            }
+            });
+            const inserted = outcomes.filter(Boolean).length;
+            const skipped = outcomes.length - inserted;
             
             // Disconnect safely
             await zkInstance.disconnect();
