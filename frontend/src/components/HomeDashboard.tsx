@@ -8,7 +8,7 @@ import { dashboardApi, type DashboardSummary, type AttendanceSnapshot, type User
 import { EmployeeAvatar } from './EmployeeAvatar';
 import { formatLeaveDuration } from '../utils/leaveRules';
 
-type NavTab = 'employees' | 'leaves' | 'attendance' | 'salary' | 'learning' | 'announcements' | 'documents' | 'my-profile';
+type NavTab = 'employees' | 'leaves' | 'attendance' | 'salary' | 'learning' | 'announcements' | 'documents' | 'my-profile' | 'holidays';
 
 // ─── Formatting helpers ───────────────────────────────────────
 
@@ -209,8 +209,8 @@ const ApprovalsCard: React.FC<{ data: DashboardSummary; go: (t: NavTab) => void 
   </Card>
 );
 
-const HolidaysCard: React.FC<{ data: DashboardSummary }> = ({ data }) => (
-  <Card title="Upcoming holidays" icon={<Palmtree className="w-4 h-4" />}>
+const HolidaysCard: React.FC<{ data: DashboardSummary; go: (t: NavTab) => void }> = ({ data, go }) => (
+  <Card title="Upcoming holidays" icon={<Palmtree className="w-4 h-4" />} action={{ label: 'View all', onClick: () => go('holidays') }}>
     {data.holidays.length === 0 ? (
       <EmptyNote icon={<Palmtree className="w-8 h-8 mb-2 text-slate-300" />} text="No upcoming holidays added yet." />
     ) : (
@@ -357,7 +357,7 @@ const EmployeeHome: React.FC<{ data: DashboardSummary; go: (t: NavTab) => void }
         </div>
         <div className="space-y-6">
           {data.approvals.count > 0 && <ApprovalsCard data={data} go={go} />}
-          <HolidaysCard data={data} />
+          <HolidaysCard data={data} go={go} />
         </div>
       </div>
     </>
@@ -408,7 +408,7 @@ const ManagerHome: React.FC<{ data: DashboardSummary; go: (t: NavTab) => void }>
         </div>
         <div className="space-y-6">
           <OnLeaveCard data={data} title="Team on leave today" />
-          <HolidaysCard data={data} />
+          <HolidaysCard data={data} go={go} />
         </div>
       </div>
     </>
@@ -541,7 +541,7 @@ const OrgHome: React.FC<{ data: DashboardSummary; role: UserRole; go: (t: NavTab
               )}
             </Card>
           )}
-          <HolidaysCard data={data} />
+          <HolidaysCard data={data} go={go} />
         </div>
       </div>
     </>

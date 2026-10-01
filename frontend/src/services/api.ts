@@ -1478,3 +1478,23 @@ export interface DashboardSummary {
 export const dashboardApi = {
     summary: () => request<DashboardSummary>('/dashboard/summary'),
 };
+
+// ─── Holidays ────────────────────────────────────────────────
+
+export interface Holiday {
+    id: number;
+    name: string;
+    /** ISO date (midnight UTC) */
+    date: string;
+}
+
+export const holidayApi = {
+    list: (year?: number) => request<Holiday[]>(`/holidays${year ? `?year=${year}` : ''}`),
+    create: (data: { name: string; date: string }) =>
+        request<Holiday>('/holidays', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: { name: string; date: string }) =>
+        request<Holiday>(`/holidays/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    remove: (id: number) => request(`/holidays/${id}`, { method: 'DELETE' }),
+    bulkCreate: (holidays: { name: string; date: string }[]) =>
+        request<{ created: number; skipped: number }>('/holidays/bulk', { method: 'POST', body: JSON.stringify({ holidays }) }),
+};

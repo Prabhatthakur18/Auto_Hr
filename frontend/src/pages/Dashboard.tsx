@@ -7,7 +7,7 @@ import {
   LogOut,
   Home, FileText, BarChart3, Loader2,
   CheckCircle, XCircle, MessageSquare, X, Send, AlertTriangle,
-  UserPlus, Search, Filter, RefreshCw, RotateCcw, GraduationCap, Bell, BookOpen, UserCircle, Menu
+  UserPlus, Search, Filter, RefreshCw, RotateCcw, GraduationCap, Bell, BookOpen, UserCircle, Menu, Palmtree
 } from 'lucide-react';
 import {
   employeeApi,
@@ -61,6 +61,7 @@ const BadgeCatalogPanel = lazy(() => import('../components/BadgeCatalogPanel').t
 const AdminLearningDashboard = lazy(() => import('../components/AdminLearningDashboard').then((m) => ({ default: m.AdminLearningDashboard })));
 const DocumentManagerPanel = lazy(() => import('../components/DocumentManagerPanel').then((m) => ({ default: m.DocumentManagerPanel })));
 const ELibraryTab = lazy(() => import('../components/tabs/ELibraryTab').then((m) => ({ default: m.ELibraryTab })));
+const HolidaysPanel = lazy(() => import('../components/HolidaysPanel').then((m) => ({ default: m.HolidaysPanel })));
 
 const ALL_ACCESS_ROLES: UserRole[] = ['HR', 'LEADERSHIP'];
 const MANAGEMENT_ROLES: UserRole[] = ['HR', 'LEADERSHIP', 'MANAGER'];
@@ -229,6 +230,7 @@ const Dashboard: React.FC = () => {
     { id: 'announcements', label: 'Announcements', icon: Megaphone },
     { id: 'attendance', label: 'Attendance', icon: Clock },
     { id: 'leaves', label: 'Leaves', icon: Calendar },
+    { id: 'holidays', label: 'Holidays', icon: Palmtree },
     { id: 'salary', label: 'Salary', icon: DollarSign },
     { id: 'documents', label: 'Documents', icon: FileText },
     { id: 'learning', label: 'Learning', icon: GraduationCap },
@@ -464,6 +466,9 @@ const Dashboard: React.FC = () => {
                   employees={employees}
                   focusEmployeeId={focusAttendanceEmployeeId}
                 />
+              )}
+              {activeTab === 'holidays' && (
+                <HolidaysPanel role={role} />
               )}
               {activeTab === 'salary' && (
                 <SalaryPage role={role} user={user} />

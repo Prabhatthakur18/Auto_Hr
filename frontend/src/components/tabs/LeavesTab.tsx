@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ChevronLeft, ChevronRight, Calendar, CheckCircle, XCircle, Clock,
   Plus, X, AlertTriangle, Loader2, Send, Info
 } from 'lucide-react';
-import { leaveApi, employeeApi, type Leave, type EmployeeDetail, type UserRole } from '../../services/api';
+import { leaveApi, employeeApi, holidayApi, type Leave, type EmployeeDetail, type UserRole } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
   isShortLeave, formatLeaveDuration, SHORT_LEAVE_MORNING, SHORT_LEAVE_EVENING,
@@ -92,6 +92,19 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
   const [loadingApprovers, setLoadingApprovers] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+
+  // ── Company holidays for the year on screen ───────────────
+  const [holidayNames, setHolidayNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    holidayApi.list(viewYear)
+      .then(res => {
+        if (cancelled) return;
+        setHolidayNames(Object.fromEntries((res.data ?? []).map(h => [h.date.slice(0, 10), h.name])));
+      })
+      .catch(() => { /* calendar still works without holiday labels */ });
+    return () => { cancelled = true; };
+  }, [viewYear]);
 
   // ── Tooltip state ─────────────────────────────────────────
   const [tooltip, setTooltip] = useState<{ leave: Leave; rect: DOMRect } | null>(null);
@@ -547,6 +560,16 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
                 >
                   {cell.day}
                 </span>
+
+                {/* Company holiday label (only when there's no leave on that day) */}
+                {cell.current && dayLeaves.length === 0 && holidayNames[cell.key] && (
+                  <div
+                    className="absolute top-[34px] left-1 right-1 text-center rounded-md px-0.5 py-[3px] text-[9px] font-semibold leading-tight truncate bg-sky-100 text-sky-800"
+                    title={`Holiday: ${holidayNames[cell.key]}`}
+                  >
+                    {holidayNames[cell.key]}
+                  </div>
+                )}
 
                 {/* Leave type label */}
                 {cell.current && dayLeaves.length > 0 && (
