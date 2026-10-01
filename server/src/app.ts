@@ -22,6 +22,7 @@ import documentRouter from './routes/documents.js';
 import notificationRouter from './routes/notifications.js';
 import libraryRouter from './routes/library.js';
 import dashboardRouter from './routes/dashboard.js';
+import cronRouter from './routes/cron.js';
 
 const app = express();
 
@@ -101,6 +102,7 @@ app.use('/api/documents', documentRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/library', libraryRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/cron', cronRouter);
 
 // ─── ERROR HANDLING ──────────────────────────────────────────
 

@@ -3,12 +3,16 @@ import prisma from '../config/db.js';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
+import { processDueAnnouncementsThrottled } from '../utils/announcementScheduler.js';
 
 const router = Router();
 router.use(authenticate);
 
 router.get('/', asyncHandler(async (req, res) => {
     const recipientId = req.user!.userId;
+    // Publish any announcement whose scheduled time has passed (throttled), so its notification
+    // shows up in this very response even without a background scheduler.
+    await processDueAnnouncementsThrottled();
     const [notifications, unreadCount] = await Promise.all([
         prisma.notification.findMany({
             where: { recipientId },

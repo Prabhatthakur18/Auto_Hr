@@ -102,6 +102,20 @@ export async function processDueAnnouncements(): Promise<void> {
     }
 }
 
+let lastOnDemandRun = 0;
+
+/**
+ * Publishes due scheduled announcements from normal request traffic, at most once a minute per
+ * server instance. Needed on serverless hosting, where the 30s interval scheduler doesn't run;
+ * the notification poll every logged-in client makes provides the trigger. Never throws.
+ */
+export async function processDueAnnouncementsThrottled(): Promise<void> {
+    const now = Date.now();
+    if (now - lastOnDemandRun < 60_000) return;
+    lastOnDemandRun = now;
+    await processDueAnnouncements().catch(error => console.error('On-demand announcement publish failed:', error));
+}
+
 export function startAnnouncementScheduler(): NodeJS.Timeout {
     void processDueAnnouncements().catch(error => console.error('Announcement scheduler failed:', error));
     return setInterval(() => {

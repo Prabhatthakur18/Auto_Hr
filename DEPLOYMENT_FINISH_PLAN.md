@@ -68,7 +68,10 @@ Notes:
 - `JWT_SECRET` on Vercel is a real random 64-byte value, not the `CHANGE_THIS_TO_A_RANDOM_64_CHAR_STRING` placeholder still sitting in local `.env` — don't copy that placeholder into any other environment.
 - Use a stable `SALARY_ENCRYPTION_KEY`; changing it after salary slips are generated will make existing encrypted values unreadable.
 - Vercel serverless should not run interval schedulers. The Vercel entry intentionally avoids `startAnnouncementScheduler`, `startLearningReminderScheduler`, `startLearningAutoAssignScheduler`, and `startCertificateExpiryScheduler`.
-- If scheduled jobs are needed in production, move them to Vercel Cron or another always-on job runner.
+- ✅ Scheduled jobs run via **Vercel Cron** (added 2026-10-01): `vercel.json` → `crons` calls `GET /api/cron/daily` at `30 3 * * *` UTC (09:00 IST). It runs course due/overdue reminders, course auto-assignment, certificate-expiry notices and an announcement catch-up (`server/src/routes/cron.ts`). Daily is the Hobby-plan limit and fine for these day-granular jobs.
+- The endpoint only accepts `Authorization: Bearer <CRON_SECRET>` (Vercel sends this automatically). `CRON_SECRET` is set on the Vercel project (Production). If you ever re-create it, pipe the value from Git Bash — PowerShell piping added a BOM and a literal `
+` to the stored value.
+- Scheduled announcements also publish on demand: `GET /api/notifications` (polled every 30s by logged-in clients) calls `processDueAnnouncementsThrottled()`, at most once a minute per instance, so they go out on time without waiting for the daily cron.
 - `BIOMETRIC_DEVICE_IP` (LAN-only device, `192.168.1.224`) is unreachable from Vercel. The manual attendance-sync endpoint in `server/src/routes/attendance.ts` that uses it will fail if triggered in production — it's not a background job, so it won't crash the server, but the feature itself won't work unless run from a machine on that LAN.
 - A stray, unused Vercel project named `server` (auto-created before we renamed to `auto-hr-api`) still exists in the account and can be deleted manually from the dashboard.
 

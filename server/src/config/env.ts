@@ -38,6 +38,9 @@ const envSchema = z.object({
 
     // Salary / payroll integration
     SALARY_API_KEY: z.string().default(''),
+
+    // Vercel Cron: shared secret Vercel sends as `Authorization: Bearer <CRON_SECRET>`
+    CRON_SECRET: z.string().optional().default(''),
     SALARY_ENCRYPTION_KEY: z.string().default(''),
 
     // Upload storage (avatars, other public assets)
