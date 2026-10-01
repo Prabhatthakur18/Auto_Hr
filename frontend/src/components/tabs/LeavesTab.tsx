@@ -604,7 +604,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
       {/* ═════════════════════════════════════════════════════
        *  TOOLTIP  (fixed positioned, viewport-relative)
        * ═════════════════════════════════════════════════════ */}
-      {tooltip && (
+      {tooltip && createPortal(
         <div
           className="fixed z-[60] pointer-events-none animate-fadeIn"
           style={{
