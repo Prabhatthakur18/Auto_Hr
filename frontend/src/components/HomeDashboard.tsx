@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { dashboardApi, type DashboardSummary, type AttendanceSnapshot, type UserRole } from '../services/api';
 import { EmployeeAvatar } from './EmployeeAvatar';
+import { formatLeaveDuration } from '../utils/leaveRules';
 
 type NavTab = 'employees' | 'leaves' | 'attendance' | 'salary' | 'learning' | 'announcements' | 'documents' | 'my-profile';
 
@@ -194,7 +195,7 @@ const ApprovalsCard: React.FC<{ data: DashboardSummary; go: (t: NavTab) => void 
           <PersonRow
             key={item.id}
             person={item.employee}
-            meta={`${item.type} · ${fmtRange(item.startDate, item.endDate)} · ${item.days} ${item.days === 1 ? 'day' : 'days'}`}
+            meta={`${item.type} · ${fmtRange(item.startDate, item.endDate)} · ${formatLeaveDuration(item)}`}
             onClick={() => go('leaves')}
             right={
               <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg flex-shrink-0">
@@ -333,7 +334,7 @@ const EmployeeHome: React.FC<{ data: DashboardSummary; go: (t: NavTab) => void }
                   <>
                     <p className="text-sm font-black text-slate-800 mt-1">{me.leaves.upcoming.type}</p>
                     <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                      {fmtRange(me.leaves.upcoming.startDate, me.leaves.upcoming.endDate)} · {me.leaves.upcoming.days} day{me.leaves.upcoming.days === 1 ? '' : 's'}
+                      {fmtRange(me.leaves.upcoming.startDate, me.leaves.upcoming.endDate)} · {formatLeaveDuration(me.leaves.upcoming)}
                     </p>
                   </>
                 ) : (

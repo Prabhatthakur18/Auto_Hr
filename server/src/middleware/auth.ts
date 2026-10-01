@@ -86,19 +86,28 @@ export function canReviewLeaves(role: Role): boolean {
 export async function getDescendantEmployeeIds(
     managerEmployeeId: number
 ): Promise<number[]> {
-    // One query for the whole (small) active org chart, then walk it in memory,
-    // instead of one DB round trip per hierarchy level.
-    const employees = await prisma.employee.findMany({
-        where: { isActive: true, managerId: { not: null } },
-        select: { id: true, managerId: true },
-    });
+    // Reporting lines come from two places: the legacy single `managerId` column and the
+    // "Reports to" links in employee_managers (what the profile form writes today). Both are
+    // loaded in one round trip and walked in memory, instead of one query per hierarchy level.
+    const [primaryLinks, extraLinks] = await Promise.all([
+        prisma.employee.findMany({
+            where: { isActive: true, managerId: { not: null } },
+            select: { id: true, managerId: true },
+        }),
+        prisma.employeeManager.findMany({
+            where: { employee: { isActive: true } },
+            select: { employeeId: true, managerId: true },
+        }),
+    ]);
 
-    const reportsByManager = new Map<number, number[]>();
-    for (const employee of employees) {
-        const list = reportsByManager.get(employee.managerId!) ?? [];
-        list.push(employee.id);
-        reportsByManager.set(employee.managerId!, list);
-    }
+    const reportsByManager = new Map<number, Set<number>>();
+    const link = (managerId: number, employeeId: number) => {
+        const set = reportsByManager.get(managerId) ?? new Set<number>();
+        set.add(employeeId);
+        reportsByManager.set(managerId, set);
+    };
+    for (const employee of primaryLinks) link(employee.managerId!, employee.id);
+    for (const row of extraLinks) link(row.managerId, row.employeeId);
 
     const visited = new Set<number>();
     const descendants: number[] = [];

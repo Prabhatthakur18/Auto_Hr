@@ -6,6 +6,10 @@ import {
 } from 'lucide-react';
 import { leaveApi, employeeApi, type Leave, type EmployeeDetail, type UserRole } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import {
+  isShortLeave, formatLeaveDuration, SHORT_LEAVE_MORNING, SHORT_LEAVE_EVENING,
+  SHORT_LEAVE_HOURS, SHORT_LEAVES_PER_MONTH, SHORT_LEAVE_WINDOWS,
+} from '../../utils/leaveRules';
 
 /* ─── Types & Constants ────────────────────────────────────── */
 
@@ -32,6 +36,8 @@ const LEAVE_TYPES = [
   { value: 'Earned Leave', label: 'Earned Leave', consumesQuota: true, color: '#06b6d4', bg: 'bg-cyan-500/15', text: 'text-cyan-400', border: 'border-cyan-500/20' },
   { value: 'Comp Off', label: 'Comp Off', consumesQuota: false, color: '#f59e0b', bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/20' },
   { value: 'Unpaid Leave', label: 'Unpaid Leave', consumesQuota: false, color: '#ef4444', bg: 'bg-red-500/15', text: 'text-red-400', border: 'border-red-500/20' },
+  { value: SHORT_LEAVE_MORNING, label: 'Short Leave — Morning (9:30–11:30 AM)', consumesQuota: false, color: '#14b8a6', bg: 'bg-teal-500/15', text: 'text-teal-500', border: 'border-teal-500/20' },
+  { value: SHORT_LEAVE_EVENING, label: 'Short Leave — Evening (4:00–6:00 PM)', consumesQuota: false, color: '#0d9488', bg: 'bg-teal-600/15', text: 'text-teal-600', border: 'border-teal-600/20' },
 ];
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -146,16 +152,27 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
     [myLeaves],
   );
 
-  // ── Derived: visible approvers (direct manager + HR only) ─
+  // ── Derived: this employee's reporting managers ─────────
+  // Legacy single managerId plus every "Reports to" link from the profile.
+  const managerEmployeeIds = useMemo(() => {
+    const ids = new Set<number>();
+    if (employee.managerId) ids.add(employee.managerId);
+    for (const link of employee.managers ?? []) ids.add(link.manager.id);
+    return ids;
+  }, [employee.managerId, employee.managers]);
+
+  // ── Derived: visible approvers (reporting managers + HR/Leadership) ─
   const visibleApprovers = useMemo(() => {
-    return approvers.filter(a => {
-      // Always include HR and leadership users
-      if (a.role === 'HR' || a.role === 'LEADERSHIP') return true;
-      // Include their direct manager only
-      if (employee.managerId && a.employeeId === employee.managerId) return true;
-      return false;
-    });
-  }, [approvers, employee.managerId]);
+    return approvers
+      .filter(a => {
+        // Always include HR and leadership users
+        if (a.role === 'HR' || a.role === 'LEADERSHIP') return true;
+        // Include the people this employee reports to
+        return managerEmployeeIds.has(a.employeeId);
+      })
+      // Reporting managers first, then HR / Leadership
+      .sort((a, b) => Number(managerEmployeeIds.has(b.employeeId)) - Number(managerEmployeeIds.has(a.employeeId)));
+  }, [approvers, managerEmployeeIds]);
 
   // ── Calendar grid cells ───────────────────────────────────
   const cells = useMemo(() => {
@@ -285,14 +302,14 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
         const pre: number[] = [];
         res.data.approvers.forEach(a => {
           if (isSelfApprovingRole) {
-            // Self-approving roles only pre-select their designated manager if they report to someone
-            if (employee.managerId && a.employeeId === employee.managerId) {
+            // Self-approving roles only pre-select their designated manager(s) if they report to someone
+            if (managerEmployeeIds.has(a.employeeId)) {
               pre.push(a.userId);
             }
           } else {
             // Standard employees pre-select direct manager and always include HR
             if (a.role === 'HR') pre.push(a.userId);
-            if (employee.managerId && a.employeeId === employee.managerId) {
+            if (managerEmployeeIds.has(a.employeeId)) {
               pre.push(a.userId);
             }
           }
@@ -322,7 +339,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
         type: leaveType,
         startDate: selStart,
         endDate: selEnd,
-        days: dayCount(selStart, selEnd),
+        days: isShortLeave(leaveType) ? 0 : dayCount(selStart, selEnd),
         reason: reason || undefined,
         approverIds: selectedApprovers.length > 0 ? selectedApprovers.join(',') : undefined,
       });
@@ -338,6 +355,14 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
 
   const selDays = selStart && selEnd ? dayCount(selStart, selEnd) : 0;
   const selTypeInfo = LEAVE_TYPES.find(t => t.value === leaveType);
+  const shortSelected = isShortLeave(leaveType);
+  // Short leaves already taken (pending/approved) in the month of the selected date
+  const shortUsedThisMonth = selStart
+    ? myLeaves.filter(
+        l => isShortLeave(l.type) && l.status !== 'REJECTED' && l.startDate.slice(0, 7) === selStart.slice(0, 7),
+      ).length
+    : 0;
+  const shortLeaveBlocked = shortSelected && (selDays !== 1 || shortUsedThisMonth >= SHORT_LEAVES_PER_MONTH);
   const willExceed =
     selTypeInfo?.consumesQuota && paidBalance.remaining - selDays < 0;
 
@@ -668,8 +693,10 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
                   Apply for Leave
                 </h3>
                 <p className={`text-xs mt-1 text-slate-500 font-bold uppercase tracking-wider`}>
-                  {fmtDisplay(selStart)} → {fmtDisplay(selEnd)} ·{' '}
-                  <span className={`font-black text-slate-850`}>{selDays} day{selDays !== 1 ? 's' : ''}</span>
+                  {shortSelected ? fmtDisplay(selStart) : <>{fmtDisplay(selStart)} → {fmtDisplay(selEnd)}</>} ·{' '}
+                  <span className={`font-black text-slate-850`}>
+                    {shortSelected ? `${SHORT_LEAVE_HOURS} hours` : `${selDays} day${selDays !== 1 ? 's' : ''}`}
+                  </span>
                 </p>
               </div>
               <button
@@ -793,6 +820,25 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
                 </div>
               )}
 
+              {shortSelected && (
+                <div className={`rounded-2xl p-4 border ${shortLeaveBlocked ? 'bg-red-50 border-red-200' : 'bg-teal-50/70 border-teal-200'}`}>
+                  <div className="flex items-center gap-2">
+                    {shortLeaveBlocked ? <AlertTriangle className="w-4 h-4 text-red-600" /> : <Info className="w-4 h-4 text-teal-600" />}
+                    <span className={`text-xs font-bold ${shortLeaveBlocked ? 'text-red-700' : 'text-teal-800'}`}>
+                      {selDays !== 1
+                        ? 'Short leave is for a single day — select just one date'
+                        : shortUsedThisMonth >= SHORT_LEAVES_PER_MONTH
+                          ? "You've already used this month's short leave"
+                          : `Short leave · ${SHORT_LEAVE_HOURS} hours`}
+                    </span>
+                  </div>
+                  <p className={`text-xs mt-1.5 leading-relaxed ${shortLeaveBlocked ? 'text-red-700' : 'text-teal-700'}`}>
+                    {leaveType === SHORT_LEAVE_MORNING ? 'Morning' : 'Evening'}, {SHORT_LEAVE_WINDOWS[leaveType]}.{' '}
+                    One short leave per month · unused ones don't carry forward · doesn't use your paid leave.
+                  </p>
+                </div>
+              )}
+
               {/* ── Reason ─────────────────────────────────── */}
               <div>
                 <label className={`block text-xs font-semibold mb-2 uppercase tracking-wider ${isLight ? 'text-stone-600' : 'text-slate-400'}`}>
@@ -826,7 +872,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
                     {visibleApprovers.map(a => {
                       const isHRApprover = a.role === 'HR';
                       const isLeadershipApprover = a.role === 'LEADERSHIP';
-                      const isManager = a.employeeId === employee.managerId;
+                      const isManager = managerEmployeeIds.has(a.employeeId);
                       const checked = selectedApprovers.includes(a.userId);
                       const cannotToggle = !isSelfApprovingRole && isHRApprover;
                       return (
@@ -903,7 +949,7 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={submitting || (!isSelfApprovingRole && selectedApprovers.length === 0)}
+                disabled={submitting || shortLeaveBlocked || (!isSelfApprovingRole && selectedApprovers.length === 0)}
                 className={isLight ? 'flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 text-white text-sm font-medium rounded-xl shadow-lg shadow-rose-400/20 hover:shadow-rose-400/35 hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed' : 'flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium rounded-xl shadow-lg shadow-blue-600/20 hover:shadow-blue-600/35 hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed'}
               >
                 {submitting ? (
@@ -952,9 +998,10 @@ const LeavesTab: React.FC<LeavesTabProps> = ({ leaves, employee, isHR: _isHR, on
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-bold ${isLight ? 'text-slate-800' : 'text-white'}`}>{lv.type}</p>
                     <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-550' : 'text-slate-400'}`}>
-                      {fmtDisplay(lv.startDate.split('T')[0])} →{' '}
-                      {fmtDisplay(lv.endDate.split('T')[0])} · {lv.days} day
-                      {lv.days !== 1 ? 's' : ''}
+                      {isShortLeave(lv.type)
+                        ? fmtDisplay(lv.startDate.split('T')[0])
+                        : <>{fmtDisplay(lv.startDate.split('T')[0])} → {fmtDisplay(lv.endDate.split('T')[0])}</>}
+                      {' · '}{formatLeaveDuration(lv)}
                     </p>
                     {lv.reason && (
                       <p className={`text-[11px] mt-0.5 truncate italic ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>

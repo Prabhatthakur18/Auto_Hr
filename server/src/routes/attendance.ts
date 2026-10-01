@@ -13,6 +13,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { BadRequestError } from '../utils/errors.js';
 import { notify, getManagerAndHrUserIds } from '../utils/notificationService.js';
 import { mapWithConcurrency } from '../utils/concurrency.js';
+import { isShortLeave, SHORT_LEAVE_MORNING } from '../utils/leaveRules.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -271,9 +272,17 @@ router.get(
             holidays.map((h) => [h.date.toISOString().split('T')[0]!, h.name])
         );
 
+        // Short leaves (2 hours) never turn a day into "On leave"; they're tracked per date instead.
+        const shortLeaveByDate = new Map(
+            leaves
+                .filter((leave) => isShortLeave(leave.type))
+                .map((leave) => [leave.startDate.toISOString().slice(0, 10), leave.type === SHORT_LEAVE_MORNING ? 'Morning' : 'Evening'])
+        );
+
         const getApprovedLeaveType = (dateStr: string): string | null => {
             const d = new Date(`${dateStr}T00:00:00.000Z`);
             for (const leave of leaves) {
+                if (isShortLeave(leave.type)) continue;
                 const s = new Date(leave.startDate);
                 s.setUTCHours(0, 0, 0, 0);
                 const e = new Date(leave.endDate);
@@ -402,6 +411,14 @@ router.get(
         let lateCheckInCount = 0;
 
         for (const record of mergedRecords) {
+            const shortLeave = shortLeaveByDate.get(record.date);
+            if (shortLeave) record.shortLeave = shortLeave;
+            // A morning short leave covers the first two hours, so arriving later isn't "late".
+            if (shortLeave === 'Morning') {
+                record.isLate = false;
+                record.lateBy = null;
+                continue;
+            }
             if (record.checkIn && record.status === 'PRESENT') {
                 const checkInTime = record.checkIn;
 

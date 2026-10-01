@@ -1129,7 +1129,12 @@ router.get(
             select: {
                 status: true,
                 dueDate: true,
-                employee: { select: { managerId: true, manager: { select: { id: true, name: true } } } },
+                employee: {
+                    select: {
+                        manager: { select: { id: true, name: true } },
+                        managers: { select: { manager: { select: { id: true, name: true } } }, orderBy: { id: 'asc' }, take: 1 },
+                    },
+                },
             },
         });
 
@@ -1137,11 +1142,13 @@ router.get(
         const now = new Date();
 
         for (const e of enrollments) {
-            const managerId = e.employee.managerId;
+            // Primary manager: the legacy managerId if set, else the first "Reports to" link.
+            const manager = e.employee.manager ?? e.employee.managers[0]?.manager ?? null;
+            const managerId = manager?.id ?? null;
             const key = managerId === null ? 'none' : String(managerId);
             const entry = byManager.get(key) ?? {
                 managerId,
-                managerName: e.employee.manager?.name ?? 'No manager assigned',
+                managerName: manager?.name ?? 'No manager assigned',
                 stats: emptyRollup(),
             };
             addToRollup(entry.stats, e.status, e.dueDate, now);
@@ -1170,7 +1177,15 @@ router.get(
 
         const employeeFilter = {
             ...(department ? { department: isUnassigned ? null : department } : {}),
-            ...(managerIdParam === 'none' ? { managerId: null } : { managerId: parseInt(managerIdParam, 10) }),
+            // Same primary-manager rule as the teams view: legacy managerId, else a "Reports to" link.
+            ...(managerIdParam === 'none'
+                ? { managerId: null, managers: { none: {} } }
+                : {
+                    OR: [
+                        { managerId: parseInt(managerIdParam, 10) },
+                        { managerId: null, managers: { some: { managerId: parseInt(managerIdParam, 10) } } },
+                    ],
+                }),
         };
 
         const enrollments = await prisma.enrollment.findMany({

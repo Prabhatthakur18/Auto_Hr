@@ -37,6 +37,7 @@ import { HeroBannerComposer } from '../components/HeroBannerComposer';
 import { NotificationBell } from '../components/NotificationBell';
 import { BirthdayCelebration } from '../components/BirthdayCelebration';
 import { EmployeeDirectory } from '../components/EmployeeDirectory';
+import { formatLeaveDuration } from '../utils/leaveRules';
 import { HomeDashboard } from '../components/HomeDashboard';
 import logoImg from '../images/autoform-logo.png';
 import {
@@ -1914,7 +1915,7 @@ const LeavesPanel: React.FC<{
         leave.comment,
         leave.approvedBy?.username,
         leave.days.toString(),
-        `${leave.days} day${leave.days > 1 ? 's' : ''}`,
+        formatLeaveDuration(leave),
         new Date(leave.startDate).toLocaleDateString('en-IN'),
         new Date(leave.endDate).toLocaleDateString('en-IN'),
         isMyLeave ? 'my leave' : 'team leave',
@@ -2195,7 +2196,7 @@ const LeavesPanel: React.FC<{
                       {' → '}
                       {new Date(leave.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                       {' · '}
-                      <span className="font-bold text-[#f46617]">{leave.days} day{leave.days > 1 ? 's' : ''}</span>
+                      <span className="font-bold text-[#f46617]">{formatLeaveDuration(leave)}</span>
                     </p>
                     {leave.reason && (
                       <p className="text-xs text-slate-600 mt-2.5 bg-orange-50/20 p-3 rounded-2xl border border-orange-100/20 italic">
@@ -2282,7 +2283,7 @@ const LeavesPanel: React.FC<{
                 <p>Employee: <span className="font-bold text-slate-800">{activeLeave.employee?.name}</span></p>
                 <p>Leave Type: <span className="font-bold text-slate-800">{activeLeave.type}</span></p>
                 <p>Dates: <span className="font-bold text-slate-800">
-                  {new Date(activeLeave.startDate).toLocaleDateString('en-IN')} → {new Date(activeLeave.endDate).toLocaleDateString('en-IN')} ({activeLeave.days} days)
+                  {new Date(activeLeave.startDate).toLocaleDateString('en-IN')} → {new Date(activeLeave.endDate).toLocaleDateString('en-IN')} ({formatLeaveDuration(activeLeave)})
                 </span></p>
                 {activeLeave.reason && (
                   <p className="mt-2 italic pt-2 border-t border-orange-100/30">

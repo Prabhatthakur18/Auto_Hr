@@ -2,6 +2,7 @@ import { Router } from 'express';
 import prisma from '../config/db.js';
 import { authenticate, scopeData, getScopedEmployeeIds } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { NOT_SHORT_LEAVE } from '../utils/leaveRules.js';
 
 const router = Router();
 router.use(authenticate, scopeData);
@@ -42,6 +43,7 @@ async function attendanceSnapshot(employeeIds: number[] | null, today: string, k
         prisma.leave.findMany({
             where: {
                 ...scope,
+                ...NOT_SHORT_LEAVE,
                 status: 'APPROVED',
                 startDate: { lte: day },
                 endDate: { gte: day },
@@ -120,6 +122,7 @@ router.get(
                 ? Promise.resolve([])
                 : prisma.leave.findMany({
                     where: {
+                        ...NOT_SHORT_LEAVE,
                         status: 'APPROVED',
                         startDate: { lte: todayDate },
                         endDate: { gte: todayDate },

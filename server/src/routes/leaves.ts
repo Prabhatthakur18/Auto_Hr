@@ -14,6 +14,7 @@ import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { NotFoundError, ForbiddenError, BadRequestError } from '../utils/errors.js';
 import { notify, getManagerAndHrUserIds, getEmployeeUserId } from '../utils/notificationService.js';
+import { isShortLeave, SHORT_LEAVE_TYPES, SHORT_LEAVES_PER_MONTH, SHORT_LEAVE_HOURS, SHORT_LEAVE_WINDOWS } from '../utils/leaveRules.js';
 
 const router = Router();
 
@@ -25,7 +26,7 @@ const applyLeaveSchema = z.object({
     type: z.string().min(1).max(50),
     startDate: z.string().min(1, 'Start date is required'),
     endDate: z.string().min(1, 'End date is required'),
-    days: z.number().int().min(1),
+    days: z.number().int().min(0), // 0 for a short leave (2 hours)
     reason: z.string().optional(),
     approverIds: z.string().optional(),
 });
@@ -33,6 +34,15 @@ const applyLeaveSchema = z.object({
 const leaveActionSchema = z.object({
     reason: z.string().optional(), // rejection reason
 });
+
+/** "Casual Leave leave from 2026-10-01 to 2026-10-02" or "Short Leave (Morning) on 2026-10-01". */
+function describeLeave(leave: { type: string; startDate: Date; endDate: Date }): string {
+    const start = leave.startDate.toISOString().split('T')[0];
+    const end = leave.endDate.toISOString().split('T')[0];
+    return isShortLeave(leave.type)
+        ? `${leave.type} on ${start} (${SHORT_LEAVE_WINDOWS[leave.type]})`
+        : `${leave.type} leave from ${start} to ${end}`;
+}
 
 async function canManageLeaveByHierarchy(
     req: import('express').Request,
@@ -129,10 +139,37 @@ router.post(
     '/',
     validate(applyLeaveSchema),
     asyncHandler(async (req, res) => {
-        const { type, startDate, endDate, days, reason, approverIds } = req.body as z.infer<typeof applyLeaveSchema>;
+        const { type, startDate, endDate, reason, approverIds } = req.body as z.infer<typeof applyLeaveSchema>;
+        let { days } = req.body as z.infer<typeof applyLeaveSchema>;
 
         if (!req.user?.employeeId) {
             throw new BadRequestError('No employee profile linked to this account');
+        }
+
+        const shortLeave = isShortLeave(type);
+        if (shortLeave) {
+            if (startDate.slice(0, 10) !== endDate.slice(0, 10)) {
+                throw new BadRequestError('A short leave is for a single day — pick one date');
+            }
+            days = 0;
+
+            // One short leave per calendar month (pending or approved); unused ones don't carry forward.
+            const monthStart = new Date(`${startDate.slice(0, 7)}-01T00:00:00.000Z`);
+            const nextMonth = new Date(monthStart);
+            nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+            const usedThisMonth = await prisma.leave.count({
+                where: {
+                    employeeId: req.user.employeeId,
+                    type: { in: [...SHORT_LEAVE_TYPES] },
+                    status: { in: ['PENDING', 'APPROVED'] },
+                    startDate: { gte: monthStart, lt: nextMonth },
+                },
+            });
+            if (usedThisMonth >= SHORT_LEAVES_PER_MONTH) {
+                throw new BadRequestError('You have already used your short leave for this month');
+            }
+        } else if (days < 1) {
+            throw new BadRequestError('Leave must be at least 1 day');
         }
 
         // Format approver IDs with commas to allow robust matching: e.g. ",2,5,"
@@ -170,7 +207,9 @@ router.post(
                 excludeUserId: req.user.userId,
                 type: 'LEAVE_APPLIED',
                 title: `${leave.employee.name} applied for leave`,
-                message: `${leave.type} leave from ${startDate} to ${endDate} (${days} day${days > 1 ? 's' : ''})${reason ? `. Reason: ${reason}` : ''}`,
+                message: shortLeave
+                    ? `${leave.type} on ${startDate.slice(0, 10)}, ${SHORT_LEAVE_WINDOWS[type]} (${SHORT_LEAVE_HOURS} hours)${reason ? `. Reason: ${reason}` : ''}`
+                    : `${leave.type} leave from ${startDate} to ${endDate} (${days} day${days > 1 ? 's' : ''})${reason ? `. Reason: ${reason}` : ''}`,
                 entityId: leave.id,
                 employeeId: req.user.employeeId,
             });
@@ -229,7 +268,7 @@ router.put(
                 excludeUserId: req.user!.userId,
                 type: 'LEAVE_APPROVED',
                 title: 'Your leave was approved',
-                message: `${leave.type} leave from ${leave.startDate.toISOString().split('T')[0]} to ${leave.endDate.toISOString().split('T')[0]} was approved.${reason ? ` Note: ${reason}` : ''}`,
+                message: `${describeLeave(leave)} was approved.${reason ? ` Note: ${reason}` : ''}`,
                 entityId: leave.id,
                 employeeId: leave.employeeId,
             });
@@ -288,7 +327,7 @@ router.put(
                 excludeUserId: req.user!.userId,
                 type: 'LEAVE_REJECTED',
                 title: 'Your leave was rejected',
-                message: `${leave.type} leave from ${leave.startDate.toISOString().split('T')[0]} to ${leave.endDate.toISOString().split('T')[0]} was rejected.${reason ? ` Reason: ${reason}` : ''}`,
+                message: `${describeLeave(leave)} was rejected.${reason ? ` Reason: ${reason}` : ''}`,
                 entityId: leave.id,
                 employeeId: leave.employeeId,
             });
