@@ -13,15 +13,19 @@ import { env } from '../config/env.js';
 import { storeAvatarFile } from '../utils/avatarStorage.js';
 import { generateOtp, hashOtp, verifyOtp } from '../utils/otp.js';
 import { sendOtpEmail } from '../utils/mailer.js';
+import { canUserImportPayroll, hasPayrollImportAccess } from '../utils/payrollAccess.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1 * 1024 * 1024 } });
 
-// ─── Stricter rate limit for login (5 attempts per 15 min) ──
+// ─── Stricter rate limit for login (30 attempts per 15 min) ─
+// 30 gives reasonable brute-force protection while allowing a
+// shared-office / VPN environment where many users log in from
+// the same exit IP within a 15-minute window.
 
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 5,
+    max: 30,
     standardHeaders: true,
     legacyHeaders: false,
     message: {
@@ -30,11 +34,11 @@ const loginLimiter = rateLimit({
     },
 });
 
-// ─── Rate limit for password reset requests (5 per 15 min) ──
+// ─── Rate limit for password reset requests (20 per 15 min) ─
 
 const passwordResetLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 5,
+    max: 20,
     standardHeaders: true,
     legacyHeaders: false,
     message: {
@@ -126,6 +130,7 @@ router.post(
                     role: user.role,
                     employeeId: user.employeeId,
                     employee: user.employee,
+                    canImportPayroll: await canUserImportPayroll(user.id, user.role),
                 },
             },
         });
@@ -236,13 +241,15 @@ router.get(
     '/me',
     authenticate,
     asyncHandler(async (req, res) => {
-        const user = await prisma.user.findUnique({
+        const record = await prisma.user.findUnique({
             where: { id: req.user!.userId },
             select: {
                 id: true,
                 username: true,
                 role: true,
                 employeeId: true,
+                isActive: true,
+                canImportPayroll: true,
                 employee: {
                     select: {
                         id: true,
@@ -252,18 +259,27 @@ router.get(
                         email: true,
                         avatar: true,
                         gender: true,
+                        isActive: true,
                     },
                 },
             },
         });
 
-        if (!user) {
+        if (!record) {
             throw new UnauthorizedError('User not found');
         }
 
+        // Payroll access is derived from the row we already have — no second lookup on every page load.
+        const { isActive: _isActive, canImportPayroll: _flag, employee, ...user } = record;
         res.json({
             success: true,
-            data: { user },
+            data: {
+                user: {
+                    ...user,
+                    employee: employee && (({ isActive: _employeeActive, ...rest }) => rest)(employee),
+                    canImportPayroll: hasPayrollImportAccess(record),
+                },
+            },
         });
     })
 );

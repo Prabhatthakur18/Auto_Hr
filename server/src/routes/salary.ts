@@ -22,6 +22,8 @@ import {
     type ParsedEmployeePaysheet,
 } from '../utils/payrollImport.js';
 import { notify, getEmployeeUserId, notifyEmployeesBulk } from '../utils/notificationService.js';
+import { mapWithConcurrency } from '../utils/concurrency.js';
+import { authorizePayrollImport } from '../utils/payrollAccess.js';
 
 const router = Router();
 const payrollUpload = multer({
@@ -589,7 +591,7 @@ async function buildPreviewRows(paysheets: ParsedEmployeePaysheet[]): Promise<Pr
 
 router.post(
     '/import/preview',
-    authorize('HR'),
+    authorizePayrollImport,
     payrollUpload.single('file'),
     asyncHandler(async (req, res) => {
         if (!req.file) {
@@ -634,7 +636,7 @@ router.post(
 
 router.post(
     '/import/commit',
-    authorize('HR'),
+    authorizePayrollImport,
     payrollUpload.single('file'),
     asyncHandler(async (req, res) => {
         if (!req.file) {
@@ -676,45 +678,37 @@ router.post(
             0
         ).getDate();
 
-        let imported = 0;
-        const skipped: string[] = [];
-        const slipIdByEmployeeId = new Map<number, number>();
+        const skipped = rows
+            .filter((row) => !row.matched || row.employeeId === null)
+            .map((row) => row.ledgerName);
+        const matchedRows = rows.filter(
+            (row): row is typeof row & { employeeId: number } => row.matched && row.employeeId !== null
+        );
 
-        for (const row of rows) {
-            if (!row.matched || row.employeeId === null) {
-                skipped.push(row.ledgerName);
-                continue;
-            }
-
-            const breakdownPayload = {
-                earnings: row.earnings,
-                deductions: row.deductions,
+        // Upserts run a few at a time instead of strictly one after another.
+        const slips = await mapWithConcurrency(matchedRows, 5, (row) => {
+            const slipData = {
+                grossSalary: encryptSalaryValue(row.grossSalary),
+                totalDeductions: encryptSalaryValue(row.totalDeductions),
+                netSalary: encryptSalaryValue(row.netSalary),
+                workingDays: daysInMonth,
+                daysPresent: daysInMonth,
+                breakdownJson: encryptSalaryValue({
+                    earnings: row.earnings,
+                    deductions: row.deductions,
+                }),
             };
 
-            const slip = await prisma.salarySlip.upsert({
+            return prisma.salarySlip.upsert({
                 where: { employeeId_month: { employeeId: row.employeeId, month } },
-                update: {
-                    grossSalary: encryptSalaryValue(row.grossSalary),
-                    totalDeductions: encryptSalaryValue(row.totalDeductions),
-                    netSalary: encryptSalaryValue(row.netSalary),
-                    workingDays: daysInMonth,
-                    daysPresent: daysInMonth,
-                    breakdownJson: encryptSalaryValue(breakdownPayload),
-                },
-                create: {
-                    employeeId: row.employeeId,
-                    month,
-                    grossSalary: encryptSalaryValue(row.grossSalary),
-                    totalDeductions: encryptSalaryValue(row.totalDeductions),
-                    netSalary: encryptSalaryValue(row.netSalary),
-                    workingDays: daysInMonth,
-                    daysPresent: daysInMonth,
-                    breakdownJson: encryptSalaryValue(breakdownPayload),
-                },
+                update: slipData,
+                create: { employeeId: row.employeeId, month, ...slipData },
+                select: { id: true, employeeId: true },
             });
-            slipIdByEmployeeId.set(row.employeeId, slip.id);
-            imported += 1;
-        }
+        });
+
+        const slipIdByEmployeeId = new Map(slips.map((slip) => [slip.employeeId, slip.id]));
+        const imported = slips.length;
 
         await prisma.payrollImportLog.create({
             data: {
@@ -750,7 +744,7 @@ router.post(
 
 router.get(
     '/import/history',
-    authorize('HR'),
+    authorizePayrollImport,
     asyncHandler(async (_req, res) => {
         const logs = await prisma.payrollImportLog.findMany({
             orderBy: { createdAt: 'desc' },

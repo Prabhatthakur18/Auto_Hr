@@ -14,6 +14,8 @@ model User {
   role           Role           @default(EMPLOYEE)
   employeeId     Int?           @unique @map("employee_id")
   isActive       Boolean        @default(true) @map("is_active")
+  /// Granted by HR to selected Accounts-department staff: may upload Tally payroll sheets.
+  canImportPayroll Boolean      @default(false) @map("can_import_payroll")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
   announcements  Announcement[]
@@ -48,6 +50,7 @@ model Employee {
   email            String?           @unique @db.VarChar(100)
   phone            String?           @db.VarChar(20)
   joinDate         DateTime?         @map("join_date") @db.Date
+  dateOfBirth      DateTime?         @map("date_of_birth") @db.Date
   managerId        Int?              @map("manager_id")
   avatar           String?           @db.VarChar(500)
   gender           String?           @db.VarChar(20)
@@ -123,6 +126,8 @@ model Attendance {
   employee          Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, date])
+  /// Company-wide "latest attendance day" and per-day counts (home dashboard) filter by date/status across all employees.
+  @@index([date, status])
   @@map("attendance")
 }
 

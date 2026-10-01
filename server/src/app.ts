@@ -21,6 +21,7 @@ import badgeRouter from './routes/badges.js';
 import documentRouter from './routes/documents.js';
 import notificationRouter from './routes/notifications.js';
 import libraryRouter from './routes/library.js';
+import dashboardRouter from './routes/dashboard.js';
 
 const app = express();
 
@@ -48,11 +49,16 @@ app.use(
     })
 );
 
-// Global rate limiter: 100 requests per 15 minutes per IP
+// Trust the first hop from the reverse proxy so rate-limiting uses the real
+// client IP from X-Forwarded-For rather than the proxy's IP (which would pool
+// all users together on shared hosting / office networks).
+app.set('trust proxy', 1);
+
+// Global rate limiter: 500 requests per 15 minutes per IP
 app.use(
     rateLimit({
         windowMs: 15 * 60 * 1000,
-        max: 100,
+        max: 500,
         standardHeaders: true,
         legacyHeaders: false,
         message: { success: false, error: 'Too many requests, please try again later' },
@@ -94,6 +100,7 @@ app.use('/api/badges', badgeRouter);
 app.use('/api/documents', documentRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/library', libraryRouter);
+app.use('/api/dashboard', dashboardRouter);
 
 // ─── ERROR HANDLING ──────────────────────────────────────────
 

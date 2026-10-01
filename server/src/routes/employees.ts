@@ -17,6 +17,8 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { NotFoundError, ForbiddenError, BadRequestError, ConflictError } from '../utils/errors.js';
 import { hashPassword } from '../utils/password.js';
 import { storeAvatarFile } from '../utils/avatarStorage.js';
+import { removePrivateUploadFile } from '../utils/uploadStorage.js';
+import { isAccountsDepartment } from '../utils/payrollAccess.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1 * 1024 * 1024 } });
@@ -36,6 +38,19 @@ const optionalEmail = z.preprocess(
     z.string().email('Invalid email').max(100).nullable().optional()
 );
 
+// Date of birth as YYYY-MM-DD: a real past date, age 14–100.
+const dateOfBirthSchema = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be YYYY-MM-DD')
+    .refine((value) => {
+        const date = new Date(`${value}T00:00:00.000Z`);
+        if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return false;
+        const age = (Date.now() - date.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+        return age >= 14 && age <= 100;
+    }, 'Enter a valid date of birth');
+
+const toDateOfBirth = (value: string | null | undefined) => (value ? new Date(`${value}T00:00:00.000Z`) : null);
+
 const createEmployeeSchema = z.object({
     biometricId: z.number().int().positive().optional().nullable(),
     name: z.string().min(1, 'Name is required').max(100),
@@ -44,6 +59,7 @@ const createEmployeeSchema = z.object({
     email: optionalEmail,
     phone: z.string().max(20).optional(),
     joinDate: z.string().optional().nullable(), // ISO date string
+    dateOfBirth: dateOfBirthSchema.optional().nullable(),
     managerId: z.number().int().positive().optional().nullable(),
     managerIds: z.array(z.number().int().positive()).optional(), // Multiple managers
     avatar: z.string().max(500).optional().nullable(),
@@ -79,7 +95,7 @@ const querySchema = z.object({
     department: z.string().optional(),
     managerId: z.string().optional(),
     page: z.coerce.number().int().min(1).default(1),
-    limit: z.coerce.number().int().min(1).max(100).default(50),
+    limit: z.coerce.number().int().min(1).max(1000).default(50),
 });
 
 // ─── Helper: build WHERE clause based on data scope ──────────
@@ -198,8 +214,12 @@ router.get(
                     gender: true,
                     employeeType: true,
                     tallyLedgerName: true,
+                    employeeNumber: true,
                     manager: {
                         select: { id: true, name: true },
+                    },
+                    user: {
+                        select: { role: true, isActive: true },
                     },
                 },
                 orderBy: { name: 'asc' },
@@ -339,29 +359,25 @@ router.post(
     '/master/sync',
     authorize('HR'),
     asyncHandler(async (_req, res) => {
-        let created = 0;
-        let skipped = 0;
+        // One read + one bulk insert instead of two queries per master record.
+        const existing = await prisma.employee.findMany({
+            where: { biometricId: { in: masterEmployees.map((m) => m.biometricId) } },
+            select: { biometricId: true },
+        });
+        const existingIds = new Set(existing.map((e) => e.biometricId));
+        const toCreate = masterEmployees.filter((m) => !existingIds.has(m.biometricId));
 
-        for (const masterEmployee of masterEmployees) {
-            const existing = await prisma.employee.findUnique({
-                where: { biometricId: masterEmployee.biometricId },
-                select: { id: true },
-            });
-
-            if (existing) {
-                skipped++;
-                continue;
-            }
-
-            await prisma.employee.create({
-                data: {
-                    biometricId: masterEmployee.biometricId,
-                    name: masterEmployee.name,
-                    department: masterEmployee.department,
-                },
-            });
-            created++;
-        }
+        const { count: created } = toCreate.length > 0
+            ? await prisma.employee.createMany({
+                data: toCreate.map((m) => ({
+                    biometricId: m.biometricId,
+                    name: m.name,
+                    department: m.department,
+                })),
+                skipDuplicates: true,
+            })
+            : { count: 0 };
+        const skipped = masterEmployees.length - created;
 
         res.json({
             success: true,
@@ -372,6 +388,44 @@ router.post(
                 skipped,
             },
         });
+    })
+);
+
+// ─── GET /api/employees/birthdays/today ──────────────────────
+// Everyone (any role) sees who has a birthday today, company-wide, for the celebration
+// popup. "Today" is the India (IST) calendar day. Only day/month are exposed — never the
+// year — so ages stay private. Feb 29 birthdays are celebrated on Feb 28 in other years.
+
+router.get(
+    '/birthdays/today',
+    asyncHandler(async (_req, res) => {
+        const [year, month, day] = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        })
+            .format(new Date())
+            .split('-')
+            .map(Number) as [number, number, number];
+        const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+
+        const employees = await prisma.employee.findMany({
+            where: { isActive: true, dateOfBirth: { not: null } },
+            select: { id: true, name: true, department: true, position: true, avatar: true, gender: true, dateOfBirth: true },
+            orderBy: { name: 'asc' },
+        });
+
+        const birthdays = employees
+            .filter(({ dateOfBirth }) => {
+                const dobMonth = dateOfBirth!.getUTCMonth() + 1;
+                const dobDay = dateOfBirth!.getUTCDate();
+                if (dobMonth === month && dobDay === day) return true;
+                return !isLeapYear && dobMonth === 2 && dobDay === 29 && month === 2 && day === 28;
+            })
+            .map(({ dateOfBirth: _dateOfBirth, ...employee }) => employee);
+
+        res.json({ success: true, data: { birthdays } });
     })
 );
 
@@ -407,7 +461,7 @@ router.get(
                     where: { isActive: true },
                 },
                 user: {
-                    select: { id: true, username: true, role: true },
+                    select: { id: true, username: true, role: true, canImportPayroll: true },
                 },
             },
         });
@@ -434,6 +488,7 @@ router.post(
         const {
             createUser, username, password, role,
             joinDate,
+            dateOfBirth,
             managerIds,
             ...employeeData
         } = req.body as z.infer<typeof createEmployeeSchema>;
@@ -467,6 +522,7 @@ router.post(
                 ...employeeData,
                 skills: employeeData.skills ? JSON.stringify(employeeData.skills) : undefined,
                 joinDate: joinDate ? new Date(joinDate) : undefined,
+                dateOfBirth: dateOfBirth ? toDateOfBirth(dateOfBirth) : undefined,
             },
         });
 
@@ -515,7 +571,7 @@ router.put(
         const existing = await prisma.employee.findUnique({ where: { id } });
         if (!existing) throw new NotFoundError('Employee not found');
 
-        const { createUser, username, password, role, joinDate, managerIds, ...updateData } = req.body as z.infer<typeof updateEmployeeSchema>;
+        const { createUser, username, password, role, joinDate, dateOfBirth, managerIds, ...updateData } = req.body as z.infer<typeof updateEmployeeSchema>;
 
         if ('managerId' in req.body) {
             await validateManagerAssignment(req.body.managerId ?? null, id);
@@ -549,6 +605,7 @@ router.put(
                 skills: updateData.skills ? JSON.stringify(updateData.skills) : undefined,
                 biometricId: 'biometricId' in req.body ? (req.body.biometricId ?? null) : undefined,
                 joinDate: 'joinDate' in req.body ? (joinDate ? new Date(joinDate) : null) : undefined,
+                dateOfBirth: 'dateOfBirth' in req.body ? toDateOfBirth(dateOfBirth) : undefined,
                 // Explicitly handle null to clear the manager relation
                 managerId: 'managerId' in req.body ? (req.body.managerId ?? null) : undefined,
             },
@@ -651,6 +708,7 @@ const profileDetailsSchema = z.object({
     skills: z.array(z.string().trim().min(1).max(100)).max(50),
     education: z.string().max(1000).nullable(),
     experience: z.string().max(5000).nullable(),
+    dateOfBirth: dateOfBirthSchema.nullable().optional(),
 });
 
 router.put(
@@ -674,8 +732,9 @@ router.put(
                 skills: JSON.stringify(data.skills),
                 education: data.education?.trim() || null,
                 experience: data.experience?.trim() || null,
+                ...('dateOfBirth' in data ? { dateOfBirth: toDateOfBirth(data.dateOfBirth) } : {}),
             },
-            select: { id: true, bio: true, skills: true, education: true, experience: true },
+            select: { id: true, bio: true, skills: true, education: true, experience: true, dateOfBirth: true },
         });
 
         res.json({ success: true, data: { employee }, message: 'Profile details updated' });
@@ -790,6 +849,144 @@ router.delete(
         res.json({
             success: true,
             message: 'Employee deactivated successfully',
+        });
+    })
+);
+
+// ─── PUT /api/employees/:id/payroll-access ───────────────────
+// HR grants/revokes payroll-sheet upload access for an Accounts-department employee.
+
+router.put(
+    '/:id/payroll-access',
+    authorize('HR'),
+    validate(z.object({ enabled: z.boolean() })),
+    asyncHandler(async (req, res) => {
+        const id = parseInt(req.params['id'] as string, 10);
+        if (isNaN(id)) throw new BadRequestError('Invalid employee ID');
+        const { enabled } = req.body as { enabled: boolean };
+
+        const employee = await prisma.employee.findUnique({
+            where: { id },
+            select: { name: true, department: true, isActive: true, user: { select: { id: true, role: true } } },
+        });
+        if (!employee || !employee.isActive) throw new NotFoundError('Employee not found');
+        if (!employee.user) {
+            throw new BadRequestError(`${employee.name} has no login account — create one first`);
+        }
+        if (enabled && !isAccountsDepartment(employee.department)) {
+            throw new BadRequestError('Payroll upload access can only be given to Accounts department employees');
+        }
+
+        await prisma.user.update({
+            where: { id: employee.user.id },
+            data: { canImportPayroll: enabled },
+        });
+
+        res.json({
+            success: true,
+            message: enabled
+                ? `${employee.name} can now upload payroll sheets`
+                : `Payroll upload access removed for ${employee.name}`,
+            data: { canImportPayroll: enabled },
+        });
+    })
+);
+
+// ─── DELETE /api/employees/:id/permanent ─────────────────────
+// Permanently remove an employee (HR only). Irreversible: the employee's attendance,
+// leaves, salary slips, documents, KRAs, learning records and badges are deleted with
+// them (DB-level cascades); direct reports keep working with no manager set.
+// The linked login is deleted too — unless that user authored shared records
+// (announcements, courses, payroll imports, ...) the DB won't let go of, in which case
+// it is kept deactivated and unlinked so that history stays intact.
+
+router.delete(
+    '/:id/permanent',
+    authorize('HR'),
+    asyncHandler(async (req, res) => {
+        const id = parseInt(req.params['id'] as string, 10);
+        if (isNaN(id)) throw new BadRequestError('Invalid employee ID');
+
+        if (req.user!.employeeId === id) {
+            throw new ForbiddenError('You cannot delete your own employee record');
+        }
+
+        const existing = await prisma.employee.findUnique({
+            where: { id },
+            select: {
+                id: true,
+                name: true,
+                user: { select: { id: true, role: true, isActive: true } },
+                documents: { select: { storageKey: true } },
+            },
+        });
+        if (!existing) throw new NotFoundError('Employee not found');
+
+        const linkedUser = existing.user;
+
+        if (linkedUser?.role === 'HR' && linkedUser.isActive) {
+            const otherActiveHr = await prisma.user.count({
+                where: { role: 'HR', isActive: true, id: { not: linkedUser.id } },
+            });
+            if (otherActiveHr === 0) {
+                throw new BadRequestError('Cannot delete the last active HR account');
+            }
+        }
+
+        // Records that reference the user with ON DELETE RESTRICT — if any exist the
+        // login can't be removed without destroying shared history.
+        let userHasAuthoredRecords = false;
+        if (linkedUser) {
+            const userId = linkedUser.id;
+            const counts = await Promise.all([
+                prisma.announcement.count({ where: { createdById: userId } }),
+                prisma.attendanceCorrection.count({ where: { editedById: userId } }),
+                prisma.badge.count({ where: { createdById: userId } }),
+                prisma.course.count({ where: { createdById: userId } }),
+                prisma.employeeDocument.count({ where: { uploadedById: userId } }),
+                prisma.employeeDocumentDownload.count({ where: { downloadedById: userId } }),
+                prisma.heroBanner.count({ where: { createdById: userId } }),
+                prisma.iLTSession.count({ where: { createdById: userId } }),
+                prisma.learningPath.count({ where: { createdById: userId } }),
+                prisma.libraryDocument.count({ where: { uploadedById: userId } }),
+                prisma.payrollImportLog.count({ where: { importedById: userId } }),
+            ]);
+            userHasAuthoredRecords = counts.some((count) => count > 0);
+        }
+
+        await prisma.$transaction(async (tx) => {
+            if (linkedUser) {
+                if (userHasAuthoredRecords) {
+                    await tx.user.update({
+                        where: { id: linkedUser.id },
+                        data: { isActive: false, employeeId: null },
+                    });
+                } else {
+                    await tx.user.delete({ where: { id: linkedUser.id } });
+                }
+            }
+            await tx.employee.delete({ where: { id } });
+        });
+
+        // Stored document files aren't covered by the DB cascade — clean them up best-effort.
+        await Promise.all(
+            existing.documents
+                .filter((document) => document.storageKey)
+                .map((document) => removePrivateUploadFile(document.storageKey!).catch(() => {}))
+        );
+
+        const loginNote = !linkedUser
+            ? ''
+            : userHasAuthoredRecords
+                ? ' Their login was deactivated (kept because they authored shared records).'
+                : ' Their login account was removed.';
+
+        res.json({
+            success: true,
+            message: `${existing.name} was permanently deleted.${loginNote}`,
+            data: {
+                userAccount: !linkedUser ? 'none' : userHasAuthoredRecords ? 'deactivated' : 'deleted',
+            },
         });
     })
 );
