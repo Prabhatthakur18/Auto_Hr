@@ -53,34 +53,26 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
 
   const selfEmployee = employees.find(emp => emp.id === user?.employeeId) || null;
   const teamEmployees = employees.filter(emp => emp.id !== user?.employeeId);
-  const sidebarSections = canViewAllEmployees
+  // Everyone who can browse others still gets their own attendance pinned at the top.
+  const sidebarSections = canBrowseEmployeeAttendance
     ? [
+        ...(selfEmployee ? [{ title: 'My Attendance', employees: [selfEmployee] }] : []),
         {
-          title: 'Employees',
-          employees,
+          title: canViewAllEmployees ? 'Employees' : 'Team Members',
+          employees: teamEmployees,
         },
       ]
-    : isManager
-      ? [
-          {
-            title: 'My Attendance',
-            employees: selfEmployee ? [selfEmployee] : [],
-          },
-          {
-            title: 'Team Members',
-            employees: teamEmployees,
-          },
-        ]
-      : [];
+    : [];
 
-  // Default selection based on role scope
+  // Default to the viewer's own attendance; HR/Leadership without a linked profile start on the first employee.
   useEffect(() => {
-    if (isManager || !canBrowseEmployeeAttendance) {
-      setSelectedEmployeeId(user?.employeeId ?? null);
-    } else if (employees.length > 0 && selectedEmployeeId === null) {
+    if (selectedEmployeeId !== null) return;
+    if (user?.employeeId) {
+      setSelectedEmployeeId(user.employeeId);
+    } else if (canBrowseEmployeeAttendance && employees.length > 0) {
       setSelectedEmployeeId(employees[0]!.id);
     }
-  }, [canBrowseEmployeeAttendance, employees, isManager, selectedEmployeeId, user]);
+  }, [canBrowseEmployeeAttendance, employees, selectedEmployeeId, user]);
 
   // Jump to the employee referenced by an incoming notification
   useEffect(() => {
@@ -357,15 +349,15 @@ export const AttendancePanel: React.FC<AttendancePanelProps> = ({ user, employee
         )}
 
         {/* Selected Employee log panel */}
-        <div className={`bg-white rounded-[32px] p-6 border border-orange-100/50 shadow-card ${canBrowseEmployeeAttendance ? 'lg:col-span-3' : 'lg:col-span-4'}`}>
-          <div className="flex items-center justify-between mb-6">
+        <div className={`bg-white rounded-[32px] p-4 sm:p-6 border border-orange-100/50 shadow-card min-w-0 ${canBrowseEmployeeAttendance ? 'lg:col-span-3' : 'lg:col-span-4'}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
             <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
               <Clock className="w-5 h-5 text-[#f46617]" />
-              {canBrowseEmployeeAttendance
-                ? `Log: ${employees.find((e) => e.id === selectedEmployeeId)?.name || ''}`
-                : 'My Attendance Logs'}
+              {!canBrowseEmployeeAttendance || selectedEmployeeId === user?.employeeId
+                ? 'My Attendance Logs'
+                : `Log: ${employees.find((e) => e.id === selectedEmployeeId)?.name || ''}`}
             </h3>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {selectedEmployeeId === user?.employeeId && !showSelfCorrection && (
                 <button
                   onClick={() => setShowSelfCorrection(true)}

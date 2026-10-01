@@ -9,7 +9,8 @@ export const ProfileDrawer: React.FC<{
   employeeId: number;
   initialTab?: Tab;
   onClose: () => void;
-}> = ({ employeeId, initialTab = 'about', onClose }) => {
+  onEmployeeRemoved?: () => void;
+}> = ({ employeeId, initialTab = 'about', onClose, onEmployeeRemoved }) => {
   const [currentEmployeeId, setCurrentEmployeeId] = useState(employeeId);
   const [tab, setTab] = useState<Tab>(initialTab);
 
@@ -37,7 +38,7 @@ export const ProfileDrawer: React.FC<{
       />
       <div className="absolute inset-y-0 right-0 w-full max-w-[1000px] bg-white border-l border-orange-100 shadow-2xl animate-slide-in">
         <div className="h-full flex flex-col">
-          <div className="flex items-center justify-between px-6 py-5 border-b border-orange-100 bg-orange-50/20 backdrop-blur">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-orange-100 bg-orange-50/20 backdrop-blur">
             <div className="min-w-0">
               <p className="text-[10px] font-bold tracking-wider text-[#f46617] uppercase">{title}</p>
               <p className="text-sm text-slate-500 font-semibold mt-0.5">Employee #{currentEmployeeId}</p>
@@ -52,13 +53,14 @@ export const ProfileDrawer: React.FC<{
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            <div className="px-6 py-6">
+            <div className="px-3 py-4 sm:px-6 sm:py-6">
               <ProfileView
                 employeeId={currentEmployeeId}
                 initialTab={tab}
                 theme="light"
                 onBack={onClose}
                 onOpenEmployee={(id) => setCurrentEmployeeId(id)}
+                onEmployeeRemoved={onEmployeeRemoved}
               />
             </div>
           </div>

@@ -138,6 +138,7 @@ export const employeeApi = {
         skills?: string[];
         education?: string | null;
         experience?: string | null;
+        dateOfBirth?: string | null;
     }) => request<{ employee: Partial<EmployeeDetail> }>(`/employees/${id}/profile-details`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -161,6 +162,18 @@ export const employeeApi = {
 
     delete: (id: number) =>
         request(`/employees/${id}`, { method: 'DELETE' }),
+
+    birthdaysToday: () =>
+        request<{ birthdays: BirthdayPerson[] }>('/employees/birthdays/today'),
+
+    setPayrollAccess: (id: number, enabled: boolean) =>
+        request<{ canImportPayroll: boolean }>(`/employees/${id}/payroll-access`, {
+            method: 'PUT',
+            body: JSON.stringify({ enabled }),
+        }),
+
+    deletePermanently: (id: number) =>
+        request<{ userAccount: 'none' | 'deleted' | 'deactivated' }>(`/employees/${id}/permanent`, { method: 'DELETE' }),
 
     team: (id: number) =>
         request<{ team: Employee[]; count: number }>(`/employees/${id}/team`),
@@ -765,6 +778,8 @@ export interface AuthUser {
         avatar: string | null;
         gender: string | null;
     } | null;
+    /** HR, or Accounts staff HR has granted payroll-upload access to. */
+    canImportPayroll?: boolean;
 }
 
 export interface Employee {
@@ -776,6 +791,7 @@ export interface Employee {
     email: string | null;
     phone: string | null;
     joinDate: string | null;
+    dateOfBirth?: string | null;
     managerId: number | null;
     avatar: string | null;
     gender: string | null;
@@ -791,7 +807,9 @@ export interface Employee {
     bankAccountNumber: string | null;
     bankIfscCode: string | null;
     bankBranch: string | null;
-    manager?: { id: number; name: string };
+    manager?: { id: number; name: string } | null;
+    /** Login account summary — present in the employee list response. */
+    user?: { role: UserRole; isActive?: boolean } | null;
 }
 
 export interface EmployeeDetail extends Employee {
@@ -802,7 +820,7 @@ export interface EmployeeDetail extends Employee {
     isActive: boolean;
     directReports: Employee[];
     managers?: Array<{ manager: { id: number; name: string; position: string | null; department: string | null } }>;
-    user: { id: number; username: string; role: UserRole } | null;
+    user: { id: number; username: string; role: UserRole; canImportPayroll?: boolean } | null;
     gender: string | null;
     tallyLedgerName: string | null;
 }
@@ -815,6 +833,7 @@ export interface EmployeeMutationPayload {
     email?: string | null;
     phone?: string | null;
     joinDate?: string | null;
+    dateOfBirth?: string | null;
     managerId?: number | null;
     managerIds?: number[];
     avatar?: string | null;
@@ -1389,3 +1408,73 @@ export interface MemberLearningSummary {
     overdue: number;
     completionRate: number;
 }
+
+export interface BirthdayPerson {
+    id: number;
+    name: string;
+    department: string | null;
+    position: string | null;
+    avatar: string | null;
+    gender: string | null;
+}
+
+// ─── Home dashboard ──────────────────────────────────────────
+
+export interface DashboardPerson {
+    id: number;
+    name: string;
+    department: string | null;
+    avatar: string | null;
+    gender: string | null;
+}
+
+export interface AttendanceSnapshot {
+    /** The day these numbers are for — the latest day with uploaded attendance. */
+    date: string;
+    isToday: boolean;
+    headcount: number;
+    present: number;
+    late: number;
+    onLeave: number;
+    notMarked: number;
+}
+
+export interface DashboardSummary {
+    today: string;
+    me: {
+        attendanceToday: { status: string; checkIn: string | null; checkOut: string | null; isLate: boolean } | null;
+        month: { present: number; late: number; onLeave: number };
+        leaves: {
+            pending: number;
+            takenThisYear: number;
+            upcoming: { type: string; startDate: string; endDate: string; days: number } | null;
+        };
+        learning: {
+            active: number;
+            overdue: number;
+            completed: number;
+            nextDue: { courseId: number; title: string; dueDate: string } | null;
+        };
+        latestSlipMonth: string | null;
+    } | null;
+    holidays: { id: number; name: string; date: string }[];
+    approvals: {
+        count: number;
+        items: { id: number; type: string; startDate: string; endDate: string; days: number; employee: DashboardPerson }[];
+    };
+    onLeaveToday: { id: number; type: string; endDate: string; employee: DashboardPerson }[];
+    team: { size: number; attendance: AttendanceSnapshot | null; learningOverdue: number } | null;
+    org: {
+        headcount: number;
+        newJoinersThisMonth: number;
+        departments: { name: string; count: number }[];
+        attendance: AttendanceSnapshot | null;
+        learning: { active: number; overdue: number; completionRate: number | null };
+        payroll: { month: string; importedCount: number; createdAt: string } | null;
+        incompleteProfiles: number;
+    } | null;
+}
+
+export const dashboardApi = {
+    summary: () => request<DashboardSummary>('/dashboard/summary'),
+};

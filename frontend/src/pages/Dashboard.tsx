@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import LoginForm from '../components/LoginForm';
 import {
   Users, Calendar, Clock, DollarSign, Megaphone,
-  LogOut, ChevronRight,
+  LogOut,
   Home, FileText, BarChart3, Loader2,
   CheckCircle, XCircle, MessageSquare, X, Send, AlertTriangle,
-  UserPlus, Search, Filter, RefreshCw, RotateCcw, GraduationCap, Bell, BookOpen
+  UserPlus, Search, Filter, RefreshCw, RotateCcw, GraduationCap, Bell, BookOpen, UserCircle, Menu
 } from 'lucide-react';
 import {
   employeeApi,
@@ -28,24 +28,16 @@ import { ProfileDrawer } from '../components/ProfileDrawer';
 import { ProfileView } from './Profile';
 import { EmployeeAvatar } from '../components/EmployeeAvatar';
 import { DropdownSelect } from '../components/DropdownSelect';
-import SalaryTab from '../components/tabs/SalaryTab';
-import { PayrollImportPanel } from '../components/PayrollImportPanel';
-import { PayrollImportHistory } from '../components/PayrollImportHistory';
+import { DEPARTMENTS, EMPLOYEE_TYPES, optionsWithCurrent } from '../utils/employeeOptions';
 import { AnnouncementSpotlight } from '../components/AnnouncementSpotlight';
 import { AnnouncementComposer } from '../components/AnnouncementComposer';
 import { AnnouncementDetailDialog } from '../components/AnnouncementDetailDialog';
 import { HeroBannerCarousel } from '../components/HeroBannerCarousel';
 import { HeroBannerComposer } from '../components/HeroBannerComposer';
-import { LearningCatalogPanel } from '../components/LearningCatalogPanel';
-import { MyLearningPanel } from '../components/MyLearningPanel';
-import { TeamLearningPanel } from '../components/TeamLearningPanel';
-import { LearningPathsPanel } from '../components/LearningPathsPanel';
-import { ILTSessionsPanel } from '../components/ILTSessionsPanel';
-import { BadgeCatalogPanel } from '../components/BadgeCatalogPanel';
-import { AdminLearningDashboard } from '../components/AdminLearningDashboard';
-import { DocumentManagerPanel } from '../components/DocumentManagerPanel';
-import { ELibraryTab } from '../components/tabs/ELibraryTab';
 import { NotificationBell } from '../components/NotificationBell';
+import { BirthdayCelebration } from '../components/BirthdayCelebration';
+import { EmployeeDirectory } from '../components/EmployeeDirectory';
+import { HomeDashboard } from '../components/HomeDashboard';
 import logoImg from '../images/autoform-logo.png';
 import {
   EMPTY_PAGE_FILTERS,
@@ -54,6 +46,20 @@ import {
   type DateFilterMode,
   type PageFilterState,
 } from '../utils/pageFilters';
+
+// Tab-specific panels are split into their own chunks and loaded when first opened.
+const SalaryTab = lazy(() => import('../components/tabs/SalaryTab'));
+const PayrollImportPanel = lazy(() => import('../components/PayrollImportPanel').then((m) => ({ default: m.PayrollImportPanel })));
+const PayrollImportHistory = lazy(() => import('../components/PayrollImportHistory').then((m) => ({ default: m.PayrollImportHistory })));
+const LearningCatalogPanel = lazy(() => import('../components/LearningCatalogPanel').then((m) => ({ default: m.LearningCatalogPanel })));
+const MyLearningPanel = lazy(() => import('../components/MyLearningPanel').then((m) => ({ default: m.MyLearningPanel })));
+const TeamLearningPanel = lazy(() => import('../components/TeamLearningPanel').then((m) => ({ default: m.TeamLearningPanel })));
+const LearningPathsPanel = lazy(() => import('../components/LearningPathsPanel').then((m) => ({ default: m.LearningPathsPanel })));
+const ILTSessionsPanel = lazy(() => import('../components/ILTSessionsPanel').then((m) => ({ default: m.ILTSessionsPanel })));
+const BadgeCatalogPanel = lazy(() => import('../components/BadgeCatalogPanel').then((m) => ({ default: m.BadgeCatalogPanel })));
+const AdminLearningDashboard = lazy(() => import('../components/AdminLearningDashboard').then((m) => ({ default: m.AdminLearningDashboard })));
+const DocumentManagerPanel = lazy(() => import('../components/DocumentManagerPanel').then((m) => ({ default: m.DocumentManagerPanel })));
+const ELibraryTab = lazy(() => import('../components/tabs/ELibraryTab').then((m) => ({ default: m.ELibraryTab })));
 
 const ALL_ACCESS_ROLES: UserRole[] = ['HR', 'LEADERSHIP'];
 const MANAGEMENT_ROLES: UserRole[] = ['HR', 'LEADERSHIP', 'MANAGER'];
@@ -73,6 +79,9 @@ const getRoleBadgeClasses = (role: UserRole) => (
 const Dashboard: React.FC = () => {
   const { user, isLoggedIn, isLoading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
+  // Phones/tablets: the sidebar becomes a slide-in drawer opened from the top bar.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  useEffect(() => setMobileNavOpen(false), [activeTab]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -116,7 +125,8 @@ const Dashboard: React.FC = () => {
     setDataLoading(true);
     try {
       const [empRes, leaveRes, annRes, heroRes, notificationRes] = await Promise.allSettled([
-        employeeApi.list(),
+        // Whole directory in one call (the API defaults to 50 per page).
+        employeeApi.list({ limit: '1000' }),
         leaveApi.list(),
         announcementApi.list(),
         heroBannerApi.list(),
@@ -231,22 +241,66 @@ const Dashboard: React.FC = () => {
   const allDepartments = Array.from(new Set(employees.map(e => e.department).filter(Boolean))) as string[];
 
   return (
-    <div className="min-h-screen bg-app-bg flex gap-4 p-4 lg:p-6 h-screen w-screen overflow-hidden relative font-sans">
+    <div data-app-shell className="bg-app-bg flex flex-col lg:flex-row lg:gap-4 lg:p-6 h-[100dvh] w-full overflow-hidden relative font-sans">
       {/* Background Glowing Blobs */}
       <div className="absolute top-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-brand-orange/10 blur-[120px] pointer-events-none animate-pulse-slow" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-blue-400/5 blur-[120px] pointer-events-none animate-pulse-slow" />
 
-      {/* Sidebar */}
-      <aside className="w-72 bg-white rounded-[40px] border border-orange-100/60 shadow-island flex flex-col h-full relative z-10 overflow-hidden flex-shrink-0 animate-scale-in">
+      {/* Mobile top bar (below lg) */}
+      <header className="lg:hidden relative z-20 flex items-center gap-3 px-4 h-16 bg-white border-b border-orange-100/70 flex-shrink-0">
+        <button
+          type="button"
+          data-mobile-menu
+          onClick={() => setMobileNavOpen(true)}
+          className="p-2 -ml-2 rounded-xl text-slate-600 hover:bg-orange-50 transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+        <img src={logoImg} alt="Autoform" className="h-7 w-auto select-none" />
+        <div className="ml-auto flex items-center gap-2">
+          <NotificationBell
+            notifications={notifications}
+            unreadCount={unreadNotificationCount}
+            onRefresh={refreshNotifications}
+            onViewAll={() => setActiveTab('notifications')}
+            onOpenNotification={handleOpenNotification}
+          />
+          <button type="button" onClick={() => setActiveTab(role === 'EMPLOYEE' ? 'employees' : 'my-profile')} aria-label="My profile">
+            <EmployeeAvatar name={name} avatar={user?.employee?.avatar} gender={user?.employee?.gender} size="w-9 h-9" shape="rounded" />
+          </button>
+        </div>
+      </header>
+
+      {/* Drawer backdrop (below lg) */}
+      {mobileNavOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMobileNavOpen(false)} />
+      )}
+
+      {/* Sidebar — static column on lg+, slide-in drawer below */}
+      <aside
+        data-mobile-nav
+        className={`fixed inset-y-0 left-0 z-50 w-[82vw] max-w-[300px] rounded-r-[32px] transition-transform duration-300 ease-out ${
+          mobileNavOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:static lg:z-10 lg:w-72 lg:max-w-none lg:translate-x-0 lg:rounded-[40px] lg:transition-none lg:animate-scale-in bg-white border border-orange-100/60 shadow-island flex flex-col h-full overflow-hidden flex-shrink-0`}
+      >
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(false)}
+          className="lg:hidden absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 z-10"
+          aria-label="Close menu"
+        >
+          <X className="w-5 h-5" />
+        </button>
         {/* Logo */}
-        <div className="p-6 border-b border-orange-100/70 flex flex-col items-center text-center">
-          <img src={logoImg} alt="Autoform Logo" className="w-44 h-auto mb-1 select-none" />
-          <h1 className="text-2xl font-script text-slate-800 leading-none">Autoform Connect</h1>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Autoform India</p>
+        <div className="px-6 py-4 lg:p-6 border-b border-orange-100/70 flex flex-col items-start lg:items-center text-left lg:text-center">
+          <img src={logoImg} alt="Autoform Logo" className="w-32 lg:w-44 h-auto mb-1 select-none" />
+          <h1 className="text-xl lg:text-2xl font-script text-slate-800 leading-none">Autoform Connect</h1>
+          <p className="hidden lg:block text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Autoform India</p>
         </div>
 
         {/* User Info */}
-        <div className="px-6 py-4 border-b border-orange-100/40">
+        <div className="px-6 py-3 lg:py-4 border-b border-orange-100/40">
           <div className="flex items-center gap-3">
             <EmployeeAvatar
               name={name}
@@ -266,7 +320,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-4 px-3 overflow-y-auto space-y-1">
+        <nav className="flex-1 min-h-0 py-3 lg:py-4 px-3 overflow-y-auto space-y-0.5 lg:space-y-1">
           {navItems.map(item => {
             const isActive = activeTab === item.id;
             return (
@@ -297,8 +351,22 @@ const Dashboard: React.FC = () => {
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-4 border-t border-orange-100/70">
+        {/* My Profile + Logout */}
+        <div className="p-3 lg:p-4 border-t border-orange-100/70 space-y-0.5 lg:space-y-1">
+          {role !== 'EMPLOYEE' && user?.employeeId && (
+            <button
+              onClick={() => {
+                setActiveTab('my-profile');
+                setFocusAttendanceEmployeeId(null);
+              }}
+              className={activeTab === 'my-profile' ? 'nav-item-active' : 'nav-item'}
+            >
+              <div className={`p-1 rounded-lg transition-colors ${activeTab === 'my-profile' ? 'text-[#f46617]' : 'text-slate-400'}`}>
+                <UserCircle className="w-4 h-4 flex-shrink-0" />
+              </div>
+              <span>My Profile</span>
+            </button>
+          )}
           <button
             onClick={logout}
             className="w-full flex items-center gap-3 px-6 py-3 text-sm font-semibold text-slate-500 hover:text-[#f46617] hover:bg-orange-50/50 rounded-2xl transition-all"
@@ -310,8 +378,8 @@ const Dashboard: React.FC = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 bg-white rounded-[40px] border border-orange-100/60 shadow-island flex flex-col h-full overflow-hidden relative z-10 animate-scale-in">
-        <div className="flex items-center justify-end px-6 lg:px-8 pt-5 flex-shrink-0">
+      <main className="flex-1 min-h-0 min-w-0 bg-white lg:rounded-[40px] lg:border border-orange-100/60 lg:shadow-island flex flex-col lg:h-full overflow-hidden relative z-10 lg:animate-scale-in">
+        <div className="hidden lg:flex items-center justify-end px-8 pt-5 flex-shrink-0">
           <NotificationBell
             notifications={notifications}
             unreadCount={unreadNotificationCount}
@@ -320,17 +388,27 @@ const Dashboard: React.FC = () => {
             onOpenNotification={handleOpenNotification}
           />
         </div>
-        <div className="flex-1 overflow-y-auto p-6 lg:p-8 pt-2">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 lg:pt-2">
           {dataLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="w-8 h-8 text-[#f46617] animate-spin" />
             </div>
           ) : (
-            <>
+            <Suspense
+              fallback={(
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="w-8 h-8 text-[#f46617] animate-spin" />
+                </div>
+              )}
+            >
               {activeTab === 'overview' && (
                 <OverviewPanel
                   role={role}
                   name={name}
+                  onNavigate={tab => {
+                    setActiveTab(tab);
+                    setFocusAttendanceEmployeeId(null);
+                  }}
                   employeeCount={employees.length}
                   pendingLeaves={pendingLeaves}
                   announcementCount={announcements.length}
@@ -347,13 +425,20 @@ const Dashboard: React.FC = () => {
                     hideBack={true}
                   />
                 ) : (
-                  <EmployeesPanel
+                  <EmployeesPage
                     employees={employees}
                     role={role}
+                    currentEmployeeId={user?.employeeId ?? null}
                     onRefresh={loadDashboardData}
                     onOpenProfile={(employeeId: number) => setProfileDrawer({ open: true, employeeId, tab: 'about' })}
                   />
                 )
+              )}
+              {activeTab === 'my-profile' && user?.employeeId && (
+                <ProfileView
+                  employeeId={user.employeeId}
+                  hideBack={true}
+                />
               )}
               {activeTab === 'announcements' && (
                 <AnnouncementsPanel
@@ -401,16 +486,22 @@ const Dashboard: React.FC = () => {
               {activeTab === 'reports' && (
                 <ComingSoonPanel title="Reports" />
               )}
-            </>
+            </Suspense>
           )}
         </div>
       </main>
+
+      {user && <BirthdayCelebration currentEmployeeId={user.employeeId} viewerName={name} />}
 
       {profileDrawer.open && profileDrawer.employeeId && (
         <ProfileDrawer
           employeeId={profileDrawer.employeeId}
           initialTab={profileDrawer.tab}
           onClose={() => setProfileDrawer({ open: false, employeeId: null, tab: 'about' })}
+          onEmployeeRemoved={() => {
+            setProfileDrawer({ open: false, employeeId: null, tab: 'about' });
+            void loadDashboardData();
+          }}
         />
       )}
     </div>
@@ -422,6 +513,7 @@ const Dashboard: React.FC = () => {
 interface OverviewProps {
   role: UserRole;
   name: string;
+  onNavigate: (tab: string) => void;
   employeeCount: number;
   pendingLeaves: number;
   announcementCount: number;
@@ -432,11 +524,10 @@ interface OverviewProps {
 }
 
 const OverviewPanel: React.FC<OverviewProps> = ({
-  role, name, employeeCount, pendingLeaves, announcementCount, announcements, heroBanners, onViewAllAnnouncements, onRefreshAnnouncements
+  role, name, announcements, heroBanners, onNavigate, onViewAllAnnouncements, onRefreshAnnouncements
 }) => {
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
   const [showHeroComposer, setShowHeroComposer] = useState(false);
-  const greeting = new Date().getHours() < 12 ? 'Good Morning' : new Date().getHours() < 17 ? 'Good Afternoon' : 'Good Evening';
 
   const handleOpenAnnouncement = async (ann: Announcement) => {
     setSelectedAnnouncement(ann);
@@ -459,15 +550,6 @@ const OverviewPanel: React.FC<OverviewProps> = ({
     }
   };
 
-  const stats = role === 'EMPLOYEE' ? [
-    { label: 'Pending Leaves', value: pendingLeaves, icon: Calendar, color: 'from-orange-400 to-[#f46617]' },
-    { label: 'Announcements', value: announcementCount, icon: Megaphone, color: 'from-amber-400 to-yellow-500' },
-  ] : [
-    { label: 'Total Employees', value: employeeCount, icon: Users, color: 'from-blue-400 to-indigo-500' },
-    { label: 'Pending Leaves', value: pendingLeaves, icon: Calendar, color: 'from-orange-400 to-[#f46617]' },
-    { label: 'Announcements', value: announcementCount, icon: Megaphone, color: 'from-amber-400 to-yellow-500' },
-  ];
-
   return (
     <div className="space-y-6">
       <HeroBannerCarousel
@@ -477,25 +559,8 @@ const OverviewPanel: React.FC<OverviewProps> = ({
         onDelete={handleDeleteHeroBanner}
       />
 
-      <div className="mb-2">
-        <h2 className="text-3xl font-black text-slate-800 tracking-tight leading-tight">{greeting}, {name}</h2>
-        <p className="text-slate-500 font-semibold text-xs tracking-wider uppercase mt-1">Here's what's happening today</p>
-      </div>
-
-      {/* Stats Cards */}
-      <div className={`grid gap-6 ${role === 'EMPLOYEE' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'}`}>
-        {stats.map(stat => (
-          <div key={stat.label} className="bg-white rounded-[24px] p-6 border border-orange-100/50 shadow-card hover:shadow-card-hover transition-all duration-300 flex items-center justify-between group">
-            <div>
-              <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">{stat.label}</p>
-              <p className="text-4xl font-black text-slate-800 tracking-tight mt-1.5">{stat.value}</p>
-            </div>
-            <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${stat.color} flex items-center justify-center shadow-lg shadow-orange-500/5 group-hover:scale-110 transition-transform duration-300`}>
-              <stat.icon className="w-6 h-6 text-white" />
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Role-specific home: greeting, quick actions, KPIs and panels for this user's data */}
+      <HomeDashboard role={role} name={name} onNavigate={onNavigate} />
 
       <AnnouncementSpotlight
         announcements={announcements}
@@ -617,7 +682,8 @@ const PageFilterBar: React.FC<{
 };
 
 const SalaryPage: React.FC<{ role: UserRole; user: AuthUser | null }> = ({ role, user }) => {
-  const isHR = role === 'HR';
+  // HR, plus Accounts staff HR has granted payroll-upload access to.
+  const isHR = role === 'HR' || Boolean(user?.canImportPayroll);
   const [subTab, setSubTab] = useState<SalarySubTab>(isHR ? 'import' : 'my-salary');
   const [filters, setFilters] = useState<PageFilterState>(EMPTY_PAGE_FILTERS);
 
@@ -631,15 +697,15 @@ const SalaryPage: React.FC<{ role: UserRole; user: AuthUser | null }> = ({ role,
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h2 className="text-2xl font-black text-slate-800 tracking-tight">Salary</h2>
         {tabs.length > 1 && (
-          <div className="flex bg-orange-50/60 p-1.5 rounded-2xl border border-orange-100/50">
+          <div className="flex max-w-full overflow-x-auto no-scrollbar bg-orange-50/60 p-1.5 rounded-2xl border border-orange-100/50">
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setSubTab(tab.id)}
-                className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all whitespace-nowrap flex-shrink-0 ${
                   subTab === tab.id
                     ? 'bg-white text-[#f46617] shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
@@ -695,15 +761,15 @@ const LearningPage: React.FC<{ role: UserRole; user: AuthUser | null; department
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h2 className="text-2xl font-black text-slate-800 tracking-tight">Learning</h2>
         {tabs.length > 1 && (
-          <div className="flex bg-orange-50/60 p-1.5 rounded-2xl border border-orange-100/50">
+          <div className="flex max-w-full overflow-x-auto no-scrollbar bg-orange-50/60 p-1.5 rounded-2xl border border-orange-100/50">
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setSubTab(tab.id)}
-                className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all whitespace-nowrap flex-shrink-0 ${
                   subTab === tab.id
                     ? 'bg-white text-[#f46617] shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
@@ -733,18 +799,33 @@ const LearningPage: React.FC<{ role: UserRole; user: AuthUser | null; department
   );
 };
 
+// ─── Employees Page ──────────────────────────────────────────
+// The logged-in user's own record is reached via "My Profile" in the sidebar, not the directory.
+
+const EmployeesPage: React.FC<EmployeesPanelProps & { currentEmployeeId: number | null }> = ({
+  employees,
+  currentEmployeeId,
+  ...rest
+}) => (
+  <EmployeesPanel
+    {...rest}
+    employees={currentEmployeeId ? employees.filter(employee => employee.id !== currentEmployeeId) : employees}
+    allEmployees={employees}
+  />
+);
+
 // ─── Employees Panel ─────────────────────────────────────────
 
 interface EmployeesPanelProps {
   employees: Employee[];
+  /** Full list incl. the logged-in user — used for manager options. Defaults to `employees`. */
+  allEmployees?: Employee[];
   role: UserRole;
   onRefresh: () => void;
   onOpenProfile: (employeeId: number) => void;
 }
 
-const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefresh, onOpenProfile }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [deptFilter, setDeptFilter] = useState('ALL');
+const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, allEmployees = employees, role, onRefresh, onOpenProfile }) => {
   const [syncingMasterData, setSyncingMasterData] = useState(false);
   
   // Add employee modal states
@@ -756,6 +837,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [employeeType, setEmployeeType] = useState('Full-time');
   const [tallyLedgerName, setTallyLedgerName] = useState('');
@@ -785,22 +867,6 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // Extract unique departments for filtering
-  const departments = ['ALL', ...Array.from(new Set(
-    employees.map(e => e.department).filter((d): d is string => Boolean(d))
-  ))];
-
-  // Filtered employees
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (emp.position && emp.position.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase()));
-      
-    const matchesDept = deptFilter === 'ALL' || emp.department === deptFilter;
-    
-    return matchesSearch && matchesDept;
-  });
-
   const resetForm = () => {
     setName('');
     setBiometricId('');
@@ -809,6 +875,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
     setEmail('');
     setPhone('');
     setGender('');
+    setDateOfBirth('');
     setAvatarUrl('');
     setEmployeeType('Full-time');
     setTallyLedgerName('');
@@ -833,7 +900,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
       const res = await employeeApi.managersList();
       const managerMap = new Map<number, ManagerCandidate>();
 
-      (employees ?? []).forEach(employee => {
+      (allEmployees ?? []).forEach(employee => {
         managerMap.set(employee.id, {
           employeeId: employee.id,
           name: employee.name,
@@ -862,7 +929,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
       );
     } catch {
       setAvailableManagers(
-        employees.map(e => ({
+        allEmployees.map(e => ({
           employeeId: e.id,
           name: e.name,
           position: e.position,
@@ -878,7 +945,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
     if (showModal) {
       void loadManagerOptions();
     }
-  }, [showModal, employees]);
+  }, [showModal, allEmployees]);
 
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -902,6 +969,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
         email: email || undefined,
         phone: phone || undefined,
         gender: gender || undefined,
+        dateOfBirth: dateOfBirth || undefined,
         avatar: avatarUrl || undefined,
         employeeType: employeeType || undefined,
         tallyLedgerName: tallyLedgerName || undefined,
@@ -955,22 +1023,16 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
 
   return (
     <div>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-            {role === 'EMPLOYEE' ? 'My Profile' : 'Employees'}
-          </h2>
-          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-0.5">
-            {filteredEmployees.length} of {employees.length} {employees.length === 1 ? 'employee' : 'employees'} listed
-          </p>
-        </div>
-        
-        {role === 'HR' && (
-          <div className="flex items-center gap-3 self-start md:self-auto">
+      <EmployeeDirectory
+        employees={employees}
+        onOpenProfile={onOpenProfile}
+        showAdminInsights={role === 'HR'}
+        actions={role === 'HR' ? (
+          <>
             <button
               onClick={handleSyncMasterData}
               disabled={syncingMasterData}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-700 text-xs font-bold rounded-2xl transition-all"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-60 text-slate-700 text-xs font-bold rounded-2xl transition-all"
             >
               {syncingMasterData ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Sync Master Data
@@ -984,74 +1046,9 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
             >
               <UserPlus className="w-4 h-4" /> Add Employee
             </button>
-          </div>
-        )}
-      </div>
-
-      {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by name, position or email..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-orange-100 rounded-2xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-sm transition-all"
-          />
-        </div>
-        
-        <DropdownSelect
-          value={deptFilter}
-          onChange={setDeptFilter}
-          placeholder="All Departments"
-          variant="filter"
-          leadingIcon={<Filter className="w-4 h-4" />}
-          className="w-full sm:w-[200px] flex-shrink-0"
-          options={departments.map(d => ({
-            value: d || 'ALL',
-            label: d === 'ALL' ? 'All Departments' : d,
-          }))}
-        />
-      </div>
-
-      {/* Employees Grid */}
-      {filteredEmployees.length === 0 ? (
-        <div className="text-center py-16 text-slate-400 bg-white rounded-3xl border border-orange-100/50 shadow-card">
-          <Users className="w-12 h-12 mx-auto mb-3 opacity-50 text-slate-400" />
-          <p className="font-semibold">No matching employees found</p>
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 animate-scale-in">
-          {filteredEmployees.map(emp => (
-            <div
-              key={emp.id}
-              onClick={() => onOpenProfile(emp.id)}
-              className="bg-white rounded-[24px] p-5 shadow-sm border border-orange-100/50 hover:border-brand-orange/30 hover:shadow-md transition-all duration-300 group cursor-pointer flex items-center justify-between"
-            >
-              <div className="flex items-center gap-4 min-w-0 flex-1">
-                <div className="group-hover:scale-105 transition-transform duration-300">
-                  <EmployeeAvatar
-                    name={emp.name}
-                    avatar={emp.avatar}
-                    gender={emp.gender}
-                    size="w-12 h-12"
-                    shape="rounded"
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-slate-800 truncate group-hover:text-[#f46617] transition-colors">
-                    {emp.name}
-                  </p>
-                  <p className="text-xs text-slate-500 font-medium truncate mt-0.5">{emp.position || 'No position set'}</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{emp.department || 'No department'}</p>
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-[#f46617] group-hover:translate-x-0.5 transition-all ml-3 flex-shrink-0" />
-            </div>
-          ))}
-        </div>
-      )}
+          </>
+        ) : undefined}
+      />
 
       {/* Add Employee Modal */}
       {showModal && createPortal(
@@ -1129,6 +1126,20 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
 
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Date of Birth
+                  </label>
+                  <input
+                    type="date"
+                    value={dateOfBirth}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={e => setDateOfBirth(e.target.value)}
+                    disabled={submitting}
+                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
                     Biometric ID / EnNo
                   </label>
                   <input
@@ -1164,12 +1175,7 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
                     onChange={setEmployeeType}
                     disabled={submitting}
                     placeholder="Select employee type"
-                    options={[
-                      { value: 'Full-time', label: 'Full-time' },
-                      { value: 'Part-time', label: 'Part-time' },
-                      { value: 'Contract', label: 'Contract' },
-                      { value: 'Intern', label: 'Intern' },
-                    ]}
+                    options={optionsWithCurrent(EMPLOYEE_TYPES, employeeType)}
                   />
                 </div>
 
@@ -1191,13 +1197,12 @@ const EmployeesPanel: React.FC<EmployeesPanelProps> = ({ employees, role, onRefr
                   <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
                     Department
                   </label>
-                  <input
-                    type="text"
+                  <DropdownSelect
                     value={department}
-                    onChange={e => setDepartment(e.target.value)}
+                    onChange={setDepartment}
                     disabled={submitting}
-                    placeholder="e.g. Engineering"
-                    className="w-full text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all placeholder-slate-400 bg-white"
+                    placeholder="Select department"
+                    options={optionsWithCurrent(DEPARTMENTS, department)}
                   />
                 </div>
 
@@ -2005,7 +2010,7 @@ const LeavesPanel: React.FC<{
           )}
         </div>
 
-        <div className="flex items-center gap-3 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-3 self-stretch sm:self-auto min-w-0">
           <div className="flex flex-col items-start gap-1.5">
             <button
               onClick={handleApplyLeave}
@@ -2021,12 +2026,12 @@ const LeavesPanel: React.FC<{
           </div>
 
           {/* Filters */}
-          <div className="flex bg-orange-50/60 p-1.5 rounded-2xl border border-orange-100/50">
+          <div className="flex max-w-full overflow-x-auto no-scrollbar bg-orange-50/60 p-1.5 rounded-2xl border border-orange-100/50">
             {(['ALL', 'PENDING', 'APPROVED', 'REJECTED'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all whitespace-nowrap flex-shrink-0 ${
                   filter === f
                     ? 'bg-white text-[#f46617] shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'

@@ -64,7 +64,7 @@ export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = ({ banners,
     return (
       <button
         onClick={onAdd}
-        className="w-full rounded-[32px] border-2 border-dashed border-orange-200 bg-orange-50/30 hover:bg-orange-50/60 transition-all h-[220px] sm:h-[280px] flex flex-col items-center justify-center gap-2 text-slate-500"
+        className="w-full rounded-[32px] border-2 border-dashed border-orange-200 bg-orange-50/30 hover:bg-orange-50/60 transition-all h-[160px] sm:h-[280px] flex flex-col items-center justify-center gap-2 text-slate-500"
       >
         <Plus className="w-8 h-8 text-[#f46617]" />
         <span className="text-sm font-bold">Add a hero banner</span>
@@ -80,7 +80,7 @@ export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = ({ banners,
   const wrapperProps = current.linkUrl ? { href: current.linkUrl, target: '_blank', rel: 'noopener noreferrer' } : {};
 
   return (
-    <div className="relative w-full rounded-[32px] overflow-hidden shadow-card group h-[380px] sm:h-[480px]">
+    <div className="relative w-full rounded-[32px] overflow-hidden shadow-card group h-[220px] sm:h-[380px] lg:h-[480px]">
       <Wrapper {...wrapperProps} className="absolute inset-0 block">
         <BannerMedia banner={current} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />

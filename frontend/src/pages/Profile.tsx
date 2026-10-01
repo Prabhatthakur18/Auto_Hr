@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, Mail, Phone, Calendar, Building2, Users,
   Loader2, AlertCircle, Briefcase, GraduationCap, Sparkles, Camera,
-  Shield, CheckCircle, AlertTriangle, Send
+  Shield, CheckCircle, AlertTriangle, Send, Cake
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -26,6 +26,8 @@ import { EmployeeAvatar } from '../components/EmployeeAvatar';
 import { AvatarUploadPicker } from '../components/AvatarUploadPicker';
 import { compressAvatarImage } from '../utils/imageCompression';
 import { PayrollDetailsCard } from '../components/PayrollDetailsCard';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { DEPARTMENTS, EMPLOYEE_TYPES, optionsWithCurrent } from '../utils/employeeOptions';
 
 const getRoleBadgeClasses = (role: UserRole) => (
   role === 'HR'
@@ -75,7 +77,9 @@ export const ProfileView: React.FC<{
   onOpenEmployee?: (employeeId: number) => void;
   theme?: 'dark' | 'light';
   hideBack?: boolean;
-}> = ({ employeeId, initialTab = 'about', onBack, onOpenEmployee, hideBack = false }) => {
+  /** Called after HR deactivates or permanently deletes this employee. */
+  onEmployeeRemoved?: () => void;
+}> = ({ employeeId, initialTab = 'about', onBack, onOpenEmployee, hideBack = false, onEmployeeRemoved }) => {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
@@ -229,6 +233,11 @@ export const ProfileView: React.FC<{
                     <Phone className="w-4 h-4 text-[#f46617]" /> {employee.phone}
                   </span>
                 )}
+                {employee.dateOfBirth && (
+                  <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-455">
+                    <Cake className="w-4 h-4 text-[#f46617]" /> Birthday {new Date(employee.dateOfBirth).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
+                  </span>
+                )}
                 {employee.joinDate && (
                   <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-455">
                     <Calendar className="w-4 h-4 text-[#f46617]" /> Joined {new Date(employee.joinDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
@@ -321,7 +330,7 @@ export const ProfileView: React.FC<{
 
       {/* Tab Content */}
       <div className="mx-auto px-6 py-6 bg-white">
-        {activeTab === 'about' && <AboutSection employee={employee} isHR={isHR} isOwnProfile={isOwnProfile} onRefresh={loadProfile} />}
+        {activeTab === 'about' && <AboutSection employee={employee} isHR={isHR} isOwnProfile={isOwnProfile} onRefresh={loadProfile} onEmployeeRemoved={onEmployeeRemoved} />}
         {activeTab === 'performance' && (
           <PerformanceTab
             employeeId={employeeId}
@@ -369,12 +378,14 @@ const skillsFromEmployee = (value: EmployeeDetail['skills']): string => {
   return '';
 };
 
-const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnProfile: boolean; onRefresh: () => void }> = ({ employee, isHR, isOwnProfile, onRefresh }) => {
+const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnProfile: boolean; onRefresh: () => void; onEmployeeRemoved?: () => void }> = ({ employee, isHR, isOwnProfile, onRefresh, onEmployeeRemoved }) => {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [editingOwnDetails, setEditingOwnDetails] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarStatus, setAvatarStatus] = useState<string | null>(null);
@@ -415,6 +426,7 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
     pranNumber: employee.pranNumber || '',
     taxRegime: employee.taxRegime || '',
     joinDate: employee.joinDate ? employee.joinDate.split('T')[0] : '',
+    dateOfBirth: employee.dateOfBirth ? employee.dateOfBirth.split('T')[0] : '',
     managerId: employee.managerId ?? null as number | null,
     managerIds: employee.managers?.map(m => m.manager.id) ?? (employee.managerId ? [employee.managerId] : []) as number[],
     createUser: false,
@@ -456,6 +468,7 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
       pranNumber: employee.pranNumber || '',
       taxRegime: employee.taxRegime || '',
       joinDate: employee.joinDate ? employee.joinDate.split('T')[0] : '',
+      dateOfBirth: employee.dateOfBirth ? employee.dateOfBirth.split('T')[0] : '',
       managerId: employee.managerId ?? null as number | null,
       managerIds: employee.managers?.map(m => m.manager.id) ?? (employee.managerId ? [employee.managerId] : []) as number[],
       createUser: false,
@@ -557,6 +570,7 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
         pranNumber: form.pranNumber || null,
         taxRegime: form.taxRegime || null,
         joinDate: form.joinDate || null,
+        dateOfBirth: form.dateOfBirth || null,
         managerIds: form.managerIds && form.managerIds.length > 0 ? form.managerIds : [],
       };
 
@@ -595,6 +609,7 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
       skills: skillsFromEmployee(employee.skills),
       education: employee.education || '',
       experience: employee.experience || '',
+      dateOfBirth: employee.dateOfBirth ? employee.dateOfBirth.split('T')[0] : '',
     }));
     setSaveError(null);
     setEditingOwnDetails(true);
@@ -610,6 +625,7 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
         skills,
         education: form.education.trim() || null,
         experience: form.experience.trim() || null,
+        dateOfBirth: form.dateOfBirth || null,
       });
       await onRefresh();
       setEditingOwnDetails(false);
@@ -625,11 +641,27 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
     setDeactivating(true);
     try {
       await employeeApi.delete(employee.id);
-      navigate('/');
+      if (onEmployeeRemoved) onEmployeeRemoved();
+      else navigate('/');
     } catch (err: any) {
       alert(err.message || 'Failed to deactivate employee');
     } finally {
       setDeactivating(false);
+    }
+  };
+
+  const handleDeletePermanently = async () => {
+    setConfirmDelete(false);
+    setDeleting(true);
+    try {
+      const res = await employeeApi.deletePermanently(employee.id);
+      alert(res.message || `${employee.name} was permanently deleted.`);
+      if (onEmployeeRemoved) onEmployeeRemoved();
+      else navigate('/');
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete employee');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -643,6 +675,15 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        isOpen={confirmDelete}
+        variant="danger"
+        title="Delete employee permanently?"
+        message={`This permanently deletes "${employee.name}" and all of their attendance, leaves, salary slips, documents, performance and learning records. Their login is removed too. This cannot be undone — use Deactivate instead if you may need this data later.`}
+        confirmLabel="Delete Permanently"
+        onConfirm={() => void handleDeletePermanently()}
+        onCancel={() => setConfirmDelete(false)}
+      />
       {/* Action */}
       {isOwnProfile && !isHR && !editingOwnDetails && (
         <div className="flex justify-end mb-2">
@@ -653,6 +694,16 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
       )}
       {isHR && !editing && (
         <div className="flex justify-end gap-3 mb-2">
+          {!isOwnProfile && (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleting}
+              className="px-4 py-2 bg-white hover:bg-red-50 border border-red-300 text-red-600 text-xs font-bold rounded-2xl transition-all disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {deleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Delete Permanently
+            </button>
+          )}
           <button
             onClick={handleDeactivate}
             disabled={deactivating}
@@ -683,20 +734,34 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
               { label: 'Full Name', key: 'name' },
               { label: 'Biometric ID / EnNo', key: 'biometricId' },
               { label: 'Position', key: 'position' },
-              { label: 'Department', key: 'department' },
+              { label: 'Department', key: 'department', options: DEPARTMENTS, placeholder: 'Select department' },
               { label: 'Phone', key: 'phone' },
               { label: 'Email', key: 'email' },
-              { label: 'Employee Type', key: 'employeeType' },
+              { label: 'Employee Type', key: 'employeeType', options: EMPLOYEE_TYPES, placeholder: 'Select employee type' },
               { label: 'Join Date', key: 'joinDate', type: 'date' },
+              { label: 'Date of Birth', key: 'dateOfBirth', type: 'date' },
             ].map(f => (
               <div key={f.key}>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{f.label}</label>
-                <input
-                  type={f.type || 'text'}
-                  value={form[f.key as keyof typeof form] ?? ''}
-                  onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                  className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
-                />
+                {f.options ? (
+                  <select
+                    value={String(form[f.key as keyof typeof form] ?? '')}
+                    onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all cursor-pointer"
+                  >
+                    <option value="">{f.placeholder}</option>
+                    {optionsWithCurrent(f.options, String(form[f.key as keyof typeof form] ?? '')).map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={f.type || 'text'}
+                    value={form[f.key as keyof typeof form] ?? ''}
+                    onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all"
+                  />
+                )}
               </div>
             ))}
 
@@ -1028,6 +1093,11 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
             <textarea rows={4} value={form.bio} onChange={event => setForm(previous => ({ ...previous, bio: event.target.value }))} className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 resize-none" placeholder="Write a short professional introduction" />
           </div>
           <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Date of Birth</label>
+            <input type="date" max={new Date().toISOString().slice(0, 10)} value={form.dateOfBirth} onChange={event => setForm(previous => ({ ...previous, dateOfBirth: event.target.value }))} className="w-full sm:w-64 bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20" />
+            <p className="text-[11px] text-slate-400 font-semibold mt-1">Colleagues only ever see the day and month, so we can celebrate your birthday.</p>
+          </div>
+          <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Specialist Skills</label>
             <input value={form.skills} onChange={event => setForm(previous => ({ ...previous, skills: event.target.value }))} className="w-full bg-white text-slate-800 text-sm rounded-xl px-3.5 py-2.5 border border-orange-100 focus:outline-none focus:ring-2 focus:ring-brand-orange/20" placeholder="React, Payroll, Recruitment (comma separated)" />
           </div>
@@ -1122,8 +1192,75 @@ const AboutSection: React.FC<{ employee: EmployeeDetail; isHR: boolean; isOwnPro
             canEdit={isHR || isOwnProfile}
             onSaved={onRefresh}
           />
+
+          {isHR && !isOwnProfile && isAccountsDepartment(employee.department) && (
+            <PayrollAccessCard employee={employee} onSaved={onRefresh} />
+          )}
         </div>
       )}
+    </div>
+  );
+};
+
+// ─── Payroll Upload Access (HR → selected Accounts staff) ─────
+
+const isAccountsDepartment = (department: string | null | undefined) =>
+  Boolean(department && /\baccounts?\b/i.test(department));
+
+const PayrollAccessCard: React.FC<{ employee: EmployeeDetail; onSaved: () => void }> = ({ employee, onSaved }) => {
+  const enabled = Boolean(employee.user?.canImportPayroll);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggle = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await employeeApi.setPayrollAccess(employee.id, !enabled);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update payroll access');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-[28px] p-6 border border-orange-100 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="text-slate-800 font-black text-base flex items-center gap-2">
+            <Shield className="w-4 h-4 text-[#f46617]" /> Payroll Upload Access
+          </h3>
+          <p className="text-xs text-slate-500 font-semibold mt-1">
+            {employee.user
+              ? enabled
+                ? `${employee.name} can upload Tally salary sheets and see the payroll import history.`
+                : `Allow ${employee.name} to upload Tally salary sheets (Salary → Import).`
+              : `${employee.name} needs a login account before access can be given.`}
+          </p>
+        </div>
+        {employee.user && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-label="Payroll upload access"
+            onClick={() => void toggle()}
+            disabled={saving}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+              enabled ? 'bg-[#f46617]' : 'bg-slate-200'
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                enabled ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        )}
+      </div>
+      {error && <p className="text-xs font-semibold text-red-600 mt-3">{error}</p>}
     </div>
   );
 };

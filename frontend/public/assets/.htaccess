@@ -1,0 +1,12 @@
+# Vite emits content-hashed filenames into /assets, so every file here is immutable:
+# a new build gets new names. Let browsers cache them for a year instead of
+# re-downloading the bundle on every visit. index.html (outside this folder) is unaffected.
+<IfModule mod_headers.c>
+    Header always unset Pragma
+    Header always unset Expires
+    Header always set Cache-Control "public, max-age=31536000, immutable"
+</IfModule>
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 1 year"
+</IfModule>

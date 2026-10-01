@@ -8,8 +8,6 @@ import {
   X,
   FileText,
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import {
   salaryApi,
   employeeApi,
@@ -538,6 +536,11 @@ const PayslipModal: React.FC<PayslipModalProps> = ({
     if (!printRef.current) return;
     setDownloading(true);
     try {
+      // PDF libraries are large and only needed here, so load them on demand.
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
       await document.fonts.ready;
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       const canvas = await html2canvas(printRef.current, {
