@@ -2,6 +2,8 @@
 
 This file is local memory for the final production rollout. Do not paste real passwords, FTP credentials, JWT secrets, salary keys, or database URLs into this file.
 
+**Redeployed 2026-10-01** (branch `perf-mobile-and-home-redesign`): backend now runs in Vercel region `bom1` (Mumbai) via `"regions": ["bom1"]` in `server/vercel.json`, next to the Hostinger DB — responses show `X-Vercel-Id: bom1::bom1::…` (previously `bom1::iad1`, i.e. US). DB-backed requests dropped from ~2.1s to ~0.3–0.5s. Deployed with `npx vercel deploy --prod` from `server/` (CLI logged in as the project owner).
+
 **Status as of 2026-07-06:** Full stack is deployed and verified live:
 
 - Backend: `https://auto-hr-api.vercel.app` (Vercel project `auto-hr-api`, team `prabhatthakurs-projects`). `/api/health` returns 200, DB queries and auth both confirmed working against the real Hostinger MySQL database.
@@ -104,6 +106,10 @@ npm run build
 SPA deep-link/refresh 404s: ✅ fixed. Added `/public_html/connect/.htaccess` with a rewrite-to-`index.html` fallback for any path that isn't a real file/directory. Verified `/dashboard` (and by extension any other client-side route) returns 200 directly, while `/assets/*` and `/uploads/*` still serve as real files/get their own 403-on-listing rule untouched.
 
 To redeploy the frontend after a code change: rebuild with the same `VITE_API_URL`, then FTP-upload the new `dist/` contents into `/connect` (overwriting `index.html` and `assets/`); leave `.htaccess`, `uploads/`, and `default.php` alone.
+
+- Upload `assets/` first and `index.html` last, so the live page never references files that aren't there yet.
+- `dist/assets/.htaccess` (from `frontend/public/assets/.htaccess`) marks the content-hashed bundles as cacheable for a year. It must be uploaded with the rest of `assets/`; it only affects `/connect/assets`, not the root `.htaccess`.
+- The FTP password is on the Vercel project (`FTP_PASSWORD`); `vercel env pull` retrieves it — keep only the FTP_* lines and delete the pulled file afterwards.
 
 ## Hostinger Upload Storage
 
